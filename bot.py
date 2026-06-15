@@ -27,11 +27,14 @@ class OrderForm(StatesGroup):
 # --- Логика Ролей ---
 @dp.message(Command("start"))
 async def start(message: Message):
-    lang = 'ro' # Можно сделать выбор языка в БД
+    lang = await get_user_lang(message.from_user.id)
+    
+    # Кнопки также должны быть локализованы
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=get_text('client', lang), callback_data="role_client")],
         [InlineKeyboardButton(text=get_text('courier', lang), callback_data="role_courier")]
     ])
+    
     await message.answer(get_text('welcome', lang), reply_markup=kb)
 
 @dp.callback_query(F.data.startswith("role_"))
