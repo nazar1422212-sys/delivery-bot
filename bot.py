@@ -147,5 +147,22 @@ async def go_offline(message: Message):
 
 # ... (ваш остальной код, например функция main()) ...
 
+@dp.message(Command("help"))
+async def help_command(message: Message):
+    text = """
+🆘 **Помощь по боту:**
+
+📦 **Заказ доставки:** `/order`
+📜 **История:** `/history`
+
+🚚 **Для курьеров:**
+✅ Стать онлайн: `/online`
+💤 Уйти с линии: `/offline`
+💳 Привязать карту: `/setcard`
+
+*Чтобы начать принимать заказы, отправьте боту фото паспорта для проверки.*
+    """
+    await message.answer(text, parse_mode="Markdown")
+
 if __name__ == "__main__":
     asyncio.run(main())
