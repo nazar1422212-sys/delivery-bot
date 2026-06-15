@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from translations import get_text
 from database import get_user_lang
 import keep_alive.py
+from aiogram.fsm.state import State, StatesGroup
 
 # Импорт всех функций из database
 from database import (
@@ -24,6 +25,7 @@ dp = Dispatcher()
 class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
+    payment_method = State()
 
 # --- Логика Ролей ---
 @dp.message(Command("start"))
@@ -58,20 +60,16 @@ async def process_pickup(message: Message, state: FSMContext):
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
-    data = await state.get_data()
-    order = await create_order(message.from_user.id, data['pickup'], message.text, 50.0)
+    await state.update_data(delivery=message.text)
     
+    # Создаем клавиатуру выбора
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отменить", callback_data=f"cancel_{order['id']}")]
+        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash")],
+        [InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
     ])
-    await message.answer(f"✅ Заказ №{order['id']} создан! Стоимость: 50 лей.", reply_markup=kb)
-    await state.clear()
     
-    # Рассылка курьерам
-    couriers = await get_verified_couriers()
-    for c in couriers:
-        kb_acc = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order['id']}") ]])
-        await bot.send_message(c['tg_id'], f"📦 Новый заказ №{order['id']}\nОткуда: {data['pickup']}\nКуда: {message.text}", reply_markup=kb_acc)
+    await message.answer("Выберите способ оплаты:", reply_markup=kb)
+    await state.set_state(OrderForm.payment_method)
 
 # --- Обработка действий ---
 @dp.callback_query(F.data.startswith("cancel_"))
@@ -240,6 +238,24 @@ async def main():
     await connect_db()
     await init_db()
     await dp.start_polling(bot)
+
+@dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
+async def finalize_order(callback: CallbackQuery, state: FSMContext):
+    method = callback.data.split("_")[1]
+    data = await state.get_data()
+    
+    # Сохраняем метод оплаты в базу (через вашу функцию create_order)
+    # Предполагаем, что функция create_order принимает payment_method
+    await create_order(
+        user_id=callback.from_user.id,
+        pickup=data['pickup'],
+        delivery=data['delivery'],
+        payment_method=method
+    )
+    
+    text = "✅ Заказ создан! Оплата: " + ("Наличными" if method == 'cash' else "Картой")
+    await callback.message.edit_text(text)
+    await state.clear()
 
 if __name__ == "__main__":
     asyncio.run(main())
