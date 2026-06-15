@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from translations import get_text
 from database import get_user_lang
+import keep_alive.py
 
 # Импорт всех функций из database
 from database import (
