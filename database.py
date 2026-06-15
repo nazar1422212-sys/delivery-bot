@@ -90,3 +90,14 @@ async def verify_courier(tg_id):
 
 # Функции для истории уже были (add_review и get_courier_history), 
 # убедитесь, что они тоже есть в database.py
+# database.py
+
+async def delete_inactive_couriers():
+    """Удаляет курьеров, которые не заходили (не меняли статус) более 60 дней"""
+    # Допустим, у вас есть поле last_active или мы проверяем время регистрации
+    # Самый надежный способ - добавить колонку last_active в таблицу couriers
+    query = """
+    DELETE FROM couriers 
+    WHERE last_active < NOW() - INTERVAL '60 days';
+    """
+    await execute(query)
