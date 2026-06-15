@@ -24,6 +24,13 @@ async def init_db():
     """
     await execute(query)
 
+async def set_courier_card(tg_id, card):
+    await execute("UPDATE couriers SET card_number = $1 WHERE tg_id = $2", card, tg_id)
+
+async def get_courier_card(tg_id):
+    row = await fetch("SELECT card_number FROM couriers WHERE tg_id = $1", tg_id)
+    return row[0]['card_number'] if row else None
+
 async def set_courier_status(tg_id, status: bool):
     await execute("UPDATE couriers SET online = $1 WHERE tg_id = $2", status, tg_id)
 
