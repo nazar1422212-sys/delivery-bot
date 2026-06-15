@@ -134,3 +134,24 @@ async def is_near_location(courier_lat, courier_lon, target_lat, target_lon):
     # Расстояние в метрах
     distance = geodesic((courier_lat, courier_lon), (target_lat, target_lon)).meters
     return distance <= 100
+
+@dp.callback_query(F.data.startswith("accept_"))
+async def accept_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    # ... логика обновления статуса в БД ...
+    
+    # Клавиатура для курьера
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"arrived_{order_id}")],
+        [InlineKeyboardButton(text="💰 Оплата получена", callback_data=f"paid_{order_id}")]
+    ])
+    await callback.message.edit_text("Заказ принят! Жмите 'Я на месте' при прибытии.", reply_markup=kb)
+
+# Обработка прибытия
+@dp.callback_query(F.data.startswith("arrived_"))
+async def courier_arrived(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    # Здесь нужно получить координаты курьера (из БД или последнего сообщения)
+    # Если дистанция < 100м:
+    await bot.send_message(client_id, "Курьер прибыл на точку!")
+    await callback.answer("Уведомление отправлено клиенту!")
