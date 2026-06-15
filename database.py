@@ -93,6 +93,21 @@ async def get_waiting_orders():
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
 
+# Добавьте это в конец вашего файла database.py
+
+async def get_waiting_orders():
+    """Получает заказы, которые ждут курьера"""
+    return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+
+async def set_order_waiting(order_id):
+    """Меняет статус заказа на ожидание"""
+    await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
+
+async def count_online_couriers():
+    """Считает, сколько курьеров сейчас онлайн"""
+    row = await fetch("SELECT COUNT(*) FROM couriers WHERE online = TRUE AND is_verified = TRUE")
+    return row[0][0]
+
 async def get_user_lang(tg_id):
     """Получает язык пользователя, по умолчанию 'ru'"""
     row = await fetch("SELECT lang FROM users WHERE tg_id = $1", tg_id)
