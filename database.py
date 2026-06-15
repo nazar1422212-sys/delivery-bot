@@ -59,3 +59,6 @@ async def set_role(callback: CallbackQuery):
         await callback.message.edit_text("Вы зарегистрированы как Клиент. Используйте /order для создания заказа.")
     else:
         await callback.message.edit_text("Вы зарегистрированы как Курьер. Используйте /verify для верификации.")
+
+async def set_user_role(tg_id, role):
+    await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
