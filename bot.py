@@ -99,8 +99,8 @@ async def check_queue():
 async def main():
     await connect_db()
     await init_db()
-    keep_alive.run_web()
-    asyncio.create_task(check_queue())
+    keep_alive.run_web() # Запуск веб-сервера для Render
+    asyncio.create_task(check_queue()) # Обязательно для очереди заказов
     await dp.start_polling(bot)
 
 
