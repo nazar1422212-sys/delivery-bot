@@ -92,3 +92,38 @@ async def accept_order(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("decline_"))
 async def decline_order(callback: CallbackQuery):
     await callback.message.edit_text("Вы отказались от заказа.")
+
+# Состояние заказа
+class OrderForm(StatesGroup):
+    pickup = State()
+    delivery = State()
+
+@dp.message(Command("order"))
+async def start_order(message: Message, state: FSMContext):
+    await message.answer("Отправьте геолокацию точки А (посадка).")
+    await state.set_state(OrderForm.pickup)
+
+@dp.message(OrderForm.pickup, F.location)
+async def process_pickup(message: Message, state: FSMContext):
+    await state.update_data(pickup=(message.location.latitude, message.location.longitude))
+    await message.answer("Отправьте геолокацию точки Б (доставка).")
+    await state.set_state(OrderForm.delivery)
+
+@dp.message(OrderForm.delivery, F.location)
+async def process_delivery(message: Message, state: FSMContext):
+    data = await state.get_data()
+    p_lat, p_lon = data['pickup']
+    d_lat, d_lon = message.location.latitude, message.location.longitude
+    
+    # Расчет (упрощенно, как прямая линия)
+    distance = ((d_lat - p_lat)**2 + (d_lon - p_lon)**2)**0.5 * 111 
+    price = round(distance * 10.0, 2)
+    
+    # Сохранение в БД
+    order = await create_order(message.from_user.id, p_lat, p_lon, d_lat, d_lon, distance)
+    
+    await message.answer(f"Заказ создан! Стоимость: {price} лей.\nОплата: Наличными курьеру.")
+    await state.clear()
+    
+    # Рассылка курьерам (функция из предыдущих шагов)
+    await send_order_to_couriers(order['id'], f"Точка А: {p_lat}, {p_lon}\nТочка Б: {d_lat}, {d_lon}\nЦена: {price} лей")
