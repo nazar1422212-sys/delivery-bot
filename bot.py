@@ -84,3 +84,15 @@ def get_courier_keyboard(lat, lon):
         [InlineKeyboardButton(text="Я на месте", callback_data="arrived")]
     ])
     return builder
+    @dp.callback_query(F.data.startswith("approve_"))
+async def approve_courier(callback: CallbackQuery):
+    courier_id = callback.data.split("_")[1]
+    await execute("UPDATE couriers SET is_verified = TRUE WHERE tg_id = $1", int(courier_id))
+    await callback.message.answer(f"Курьер {courier_id} одобрен!")
+    await bot.send_message(courier_id, "Поздравляем! Ваш аккаунт подтвержден. Вы можете принимать заказы.")
+
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_courier(callback: CallbackQuery):
+    courier_id = callback.data.split("_")[1]
+    await callback.message.answer(f"Курьер {courier_id} отклонен.")
+    await bot.send_message(courier_id, "Извините, ваши документы не прошли проверку.")
