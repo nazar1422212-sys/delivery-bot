@@ -116,3 +116,23 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+@dp.message(Command("start"))
+async def start(message: Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Я Клиент", callback_data="role_client")],
+        [InlineKeyboardButton(text="Я Курьер", callback_data="role_courier")]
+    ])
+    await message.answer("Добро пожаловать! Кто вы?", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("role_"))
+async def set_role(callback: CallbackQuery):
+    role = callback.data.split("_")[1]
+    # Сохраняем роль в БД
+    from database import set_user_role 
+    await set_user_role(callback.from_user.id, role)
+    
+    if role == "client":
+        await callback.message.edit_text("Вы зарегистрированы как Клиент. Используйте /order для создания заказа.")
+    else:
+        await callback.message.edit_text("Вы зарегистрированы как Курьер. Используйте /verify для верификации.")
