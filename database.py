@@ -67,3 +67,16 @@ async def get_order_courier(order_id):
 
 async def cancel_order_db(order_id):
     await execute("UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id)
+
+# database.py
+
+async def get_stats_data():
+    """Возвращает общую статистику по выполненным заказам"""
+    query = """
+    SELECT 
+        COUNT(*) as total_orders,
+        AVG(rating) as avg_rating
+    FROM order_history;
+    """
+    row = await fetch(query)
+    return row[0] if row else None
