@@ -89,5 +89,20 @@ async def main():
     asyncio.create_task(check_queue())
     await dp.start_polling(bot)
 
+
+@dp.message(F.photo)
+async def handle_passport(message: Message):
+    # Проверяем, является ли пользователь курьером (можно добавить проверку в БД)
+    photo_id = message.photo[-1].file_id
+    await set_passport_photo(message.from_user.id, photo_id)
+    
+    # Отправляем вам (Админу)
+    await bot.send_photo(ADMIN_ID, photo_id, 
+                         caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", 
+                         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                             [InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}")]
+                         ]))
+    await message.answer("✅ Паспорт получен. Ожидайте подтверждения от администратора.")
+
 if __name__ == "__main__":
     asyncio.run(main())
