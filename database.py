@@ -45,3 +45,8 @@ async def create_order(client_id, p_lat, p_lon, d_lat, d_lon, distance):
     row = await fetch("INSERT INTO orders (client_id, pickup_lat, pickup_lon, delivery_lat, delivery_lon, distance, price, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING id",
                       client_id, p_lat, p_lon, d_lat, d_lon, distance, price)
     return {'id': row[0][0], 'price': price}
+
+# Добавьте эту функцию в ваш файл database.py
+async def cancel_order_db(order_id):
+    """Обновляет статус заказа на cancelled"""
+    await execute("UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id)
