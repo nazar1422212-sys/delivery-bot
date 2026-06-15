@@ -104,9 +104,12 @@ async def finish_order(callback: CallbackQuery):
     await update_order_status(order_id, 'finished')
     await callback.message.edit_text("Заказ закрыт!")
 
+# ... (здесь импорты и все обработчики @dp.message ...)
+
 async def main():
-    await connect_db()
-    await dp.start_polling(bot)
+    await connect_db()       # Подключаемся к БД
+    await init_db()          # Создаем таблицы, если их нет
+    await dp.start_polling(bot)  # Запускаем бота
 
 if __name__ == "__main__":
     asyncio.run(main())
