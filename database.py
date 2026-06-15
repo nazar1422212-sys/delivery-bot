@@ -24,7 +24,8 @@ async def init_db():
         CREATE TABLE IF NOT EXISTS order_history (id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW());
     """)
     
-    # ПРИНУДИТЕЛЬНО добавляем недостающие колонки
+    # Принудительно добавляем недостающие колонки в таблицу orders
+    # Мы используем обработку ошибок или IF NOT EXISTS, чтобы избежать сбоев при повторном запуске
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_address TEXT;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION;")
