@@ -100,4 +100,23 @@ async def delete_inactive_couriers():
     DELETE FROM couriers 
     WHERE last_active < NOW() - INTERVAL '60 days';
     """
+# database.py
+
+async def init_db():
+    # Добавьте эту строку в init_db, если колонка еще не создана
+    await execute("ALTER TABLE couriers ADD COLUMN IF NOT EXISTS last_active TIMESTAMP DEFAULT NOW();")
+    
+    # ... остальной код ...
+
+async def delete_inactive_couriers():
+    """Удаляет курьеров, которые не были активны более 60 дней"""
+    query = """
+    DELETE FROM couriers 
+    WHERE last_active < NOW() - INTERVAL '60 days';
+    """
+    await execute(query)
+
+async def update_courier_activity(tg_id):
+    """Обновляет время активности курьера (вызывать при каждом /online или /offline)"""
+    await execute("UPDATE couriers SET last_active = NOW() WHERE tg_id = $1", tg_id)
     await execute(query)
