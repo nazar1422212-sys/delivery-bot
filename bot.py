@@ -208,21 +208,24 @@ async def check_queue():
 
 # bot.py
 
+# bot.py
+
 @dp.message(Command("history"))
 async def show_history(message: Message):
-    # Получаем историю из базы
     history = await get_courier_history(message.from_user.id)
     
     if not history:
         await message.answer("У вас пока нет выполненных заказов.")
         return
 
-    # Формируем красивый список
-    text = "📜 **Ваша история заказов (последние 10):**\n\n"
-    for row in history:
-        rating = "⭐" * row['rating'] if row['rating'] > 0 else "Нет оценки"
-        text += f"📦 Заказ №{row['order_id']} | Оценка: {rating}\n"
+    text = "📜 **Ваши последние доходы:**\n\n"
+    total_earned = 0
     
+    for row in history:
+        text += f"📦 Заказ №{row['order_id']} | 💰 {row['price']} лей | { '⭐'*row['rating'] if row['rating'] else 'Нет оценки' }\n"
+        total_earned += row['price']
+    
+    text += f"\n📊 **Итого заработано: {total_earned} лей**"
     await message.answer(text)
 
 async def main():
