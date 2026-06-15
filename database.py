@@ -9,26 +9,24 @@ async def connect_db():
 
 async def init_db():
     query = """
-    CREATE TABLE IF NOT EXISTS users(
-        tg_id BIGINT PRIMARY KEY, 
-        role TEXT, 
-        lang TEXT DEFAULT 'ru'
-    );
-    CREATE TABLE IF NOT EXISTS couriers(
-        tg_id BIGINT PRIMARY KEY, 
-        online BOOLEAN DEFAULT TRUE, 
-        is_verified BOOLEAN DEFAULT FALSE
-    );
-    CREATE TABLE IF NOT EXISTS orders(
-        id SERIAL PRIMARY KEY, 
-        client_id BIGINT, 
-        courier_id BIGINT, 
-        pickup_address TEXT, 
-        delivery_address TEXT, 
-        price DOUBLE PRECISION, 
-        status TEXT
+    -- существующие таблицы --
+    CREATE TABLE IF NOT EXISTS order_history (
+        id SERIAL PRIMARY KEY,
+        order_id INT,
+        courier_id BIGINT,
+        rating INT,
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
     );
     """
+    await execute(query)
+
+async def set_courier_status(tg_id, status: bool):
+    await execute("UPDATE couriers SET online = $1 WHERE tg_id = $2", status, tg_id)
+
+async def add_review(order_id, courier_id, rating, comment):
+    await execute("INSERT INTO order_history (order_id, courier_id, rating, comment) VALUES ($1, $2, $3, $4)", 
+                  order_id, courier_id, rating, comment)
     async with pool.acquire() as conn:
         await conn.execute(query)
 
