@@ -206,6 +206,25 @@ async def check_queue():
         
         await asyncio.sleep(30) # Пауза 30 секунд между проверками
 
+# bot.py
+
+@dp.message(Command("history"))
+async def show_history(message: Message):
+    # Получаем историю из базы
+    history = await get_courier_history(message.from_user.id)
+    
+    if not history:
+        await message.answer("У вас пока нет выполненных заказов.")
+        return
+
+    # Формируем красивый список
+    text = "📜 **Ваша история заказов (последние 10):**\n\n"
+    for row in history:
+        rating = "⭐" * row['rating'] if row['rating'] > 0 else "Нет оценки"
+        text += f"📦 Заказ №{row['order_id']} | Оценка: {rating}\n"
+    
+    await message.answer(text)
+
 async def main():
     await connect_db()
     await init_db()
