@@ -171,6 +171,22 @@ async def send_msg(message, key, reply_markup=None):
     text = get_text(key, lang)
     await message.answer(text, reply_markup=reply_markup)
 
+@dp.message(OrderForm.delivery)
+async def process_delivery(message: Message, state: FSMContext):
+    data = await state.get_data()
+    # Создаем заказ сразу со статусом 'waiting'
+    order = await create_order(message.from_user.id, data['pickup'], message.text, 50.0)
+    
+    couriers = await get_verified_couriers()
+    
+    if not couriers:
+        # Если курьеров нет, сообщаем об ожидании
+        await message.answer("❌ Свободных курьеров нет. Ваш заказ в очереди на поиск...")
+        await set_order_waiting(order['id'])
+    else:
+        # Рассылка курьерам (как мы делали раньше)
+        ...
+
 async def main():
     await connect_db()
     await init_db()
