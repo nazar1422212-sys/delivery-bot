@@ -4,6 +4,9 @@ from aiogram import Bot
 from aiogram import Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message
+from keep_alive import run_web
+
+run_web()
 
 from config import TOKEN
 from database import connect_db
