@@ -37,6 +37,10 @@ async def init_db():
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
 
+async def create_courier(tg_id):
+    """Create a new courier record"""
+    await execute("INSERT INTO couriers (tg_id) VALUES ($1) ON CONFLICT (tg_id) DO NOTHING", tg_id)
+
 async def set_courier_status(tg_id, status: bool):
     await execute("UPDATE couriers SET online = $1 WHERE tg_id = $2", status, tg_id)
 
@@ -45,7 +49,7 @@ async def get_verified_couriers():
 
 async def create_order(client_id, pickup, delivery, price, payment_method):
     row = await fetch("INSERT INTO orders (client_id, pickup_address, delivery_address, price, payment_method) VALUES ($1, $2, $3, $4, $5) RETURNING id", client_id, pickup, delivery, price, payment_method)
-    return row[0][0]
+    return row[0]['id'] if row else None
 
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
