@@ -104,6 +104,37 @@ async def finish_order(callback: CallbackQuery):
     await update_order_status(order_id, 'finished')
     await callback.message.edit_text("Заказ закрыт!")
 
+# 1. Добавьте этот обработчик в ваш bot.py
+@dp.callback_query(F.data.startswith("cancel_"))
+async def cancel_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    
+    # Вызываем функцию отмены из базы данных
+    await cancel_order_db(order_id)
+    
+    # Обновляем сообщение для клиента
+    await callback.message.edit_text("❌ Заказ был успешно отменен.")
+    await callback.answer("Заказ отменен")
+
+# 2. Обновите функцию создания заказа (process_delivery), 
+# чтобы она отправляла кнопку отмены:
+@dp.message(OrderForm.delivery, F.location)
+async def process_delivery(message: Message, state: FSMContext):
+    data = await state.get_data()
+    p_lat, p_lon = data['pickup']
+    # ... ваш код создания заказа ...
+    order = await create_order(message.from_user.id, p_lat, p_lon, message.location.latitude, message.location.longitude, 5.0)
+    
+    # Кнопка отмены
+    kb_cancel = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"cancel_{order['id']}")]
+    ])
+    
+    await message.answer(f"✅ Заказ создан! Стоимость: {order['price']} лей.", reply_markup=kb_cancel)
+    await state.clear()
+    
+    # ... уведомление курьеров ...
+
 # ... (здесь импорты и все обработчики @dp.message ...)
 
 async def main():
