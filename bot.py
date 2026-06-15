@@ -148,22 +148,18 @@ async def go_offline(message: Message):
 async def help_command(message: Message):
     await message.answer("🆘 *Помощь:*\n📦 /order - Заказ\n🚚 /online - Онлайн\n💤 /offline - Офлайн\n💳 /setcard - Карта")
 
-async def check_queue():
-    while True:
-        orders = await get_waiting_orders()
-        for order in orders:
-            couriers = await get_verified_couriers()
-            if couriers:
-                # Берем данные из order (они теперь там есть, если create_order записал их)
-                text = (f"🔔 **Новый заказ №{order['id']}**\n"
-                        f"📍 {order['pickup_address']}\n"
-                        f"🏁 {order['delivery_address']}\n"
-                        f"💰 Цена: {order['price']} лей\n"
-                        f"📏 Расстояние: {calculate_price(order['pickup_address'], order['delivery_address'])[1]} км")
-                
-                await bot.send_message(couriers[0]['tg_id'], text, parse_mode="Markdown")
-                await update_order_status(order['id'], 'pending')
-        await asyncio.sleep(60)
+def calculate_price(data):
+    # Если есть координаты (lat/lon)
+    if 'pickup_lat' in data and 'delivery_lat' in data:
+        dist = geodesic((data['pickup_lat'], data['pickup_lon']), 
+                        (data['delivery_lat'], data['delivery_lon'])).km
+    else:
+        # Если только текст (старая логика)
+        # ... ваш код с Nominatim ...
+        dist = 5.0 # Заглушка, если текст не распознан
+    
+    price = 50 + (dist * 10)
+    return round(price, 0), round(dist, 1)
 
 
 
