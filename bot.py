@@ -70,13 +70,21 @@ async def process_delivery(message: Message, state: FSMContext):
 
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
+    # 1. ОБЯЗАТЕЛЬНО отвечаем на колбэк, чтобы убрать "зависание" кнопки
+    await callback.answer() 
+    
     method = callback.data.split("_")[1]
     data = await state.get_data()
+    
+    # 2. Создаем заказ в БД
     order_id = await create_order(callback.from_user.id, data['pickup'], data['delivery'], 50.0, method)
     await set_order_waiting(order_id)
+    
+    # 3. Сообщаем пользователю
     await callback.message.edit_text(f"✅ Заказ №{order_id} создан и поставлен в очередь!")
+    
+    # 4. ОЧИЩАЕМ состояние FSM, чтобы бот вернулся в обычный режим
     await state.clear()
-
 @dp.message(F.photo)
 async def handle_passport(message: Message):
     photo_id = message.photo[-1].file_id
