@@ -6,26 +6,27 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from config import TOKEN, ADMIN_ID
-from database import connect_db, execute, update_courier_verification, get_verified_couriers
+from database import connect_db, execute, update_courier_verification
 from keep_alive import run_web
 
-# Инициализация
+# Запуск веб-сервера для Render
 run_web()
+
 bot = Bot(TOKEN)
 dp = Dispatcher()
 
+# Состояния
 class CourierVerification(StatesGroup):
     waiting_for_doc = State()
-
-# --- Обработчики ---
 
 @dp.message(Command("start"))
 async def start(message: Message):
     await message.answer("Бот доставки запущен. Используйте /verify для регистрации курьера.")
 
+# Верификация
 @dp.message(Command("verify"))
 async def start_verify(message: Message, state: FSMContext):
-    await message.answer("Пришлите фото вашего документа.")
+    await message.answer("Пришлите фото вашего паспорта.")
     await state.set_state(CourierVerification.waiting_for_doc)
 
 @dp.message(CourierVerification.waiting_for_doc, F.photo)
@@ -37,8 +38,9 @@ async def handle_photo(message: Message, state: FSMContext):
     ])
     await bot.send_photo(ADMIN_ID, photo_id, caption=f"Курьер {message.from_user.id} на проверке.", reply_markup=kb)
     await state.clear()
-    await message.answer("Документы отправлены админу.")
+    await message.answer("Документы отправлены на проверку.")
 
+# Обработка ответов админа
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_courier(callback: CallbackQuery):
     c_id = int(callback.data.split("_")[1])
@@ -46,7 +48,11 @@ async def approve_courier(callback: CallbackQuery):
     await callback.message.edit_caption(caption="✅ Курьер одобрен")
     await bot.send_message(c_id, "Ваш профиль подтвержден!")
 
-# --- Запуск ---
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_courier(callback: CallbackQuery):
+    c_id = int(callback.data.split("_")[1])
+    await callback.message.edit_caption(caption="❌ Курьер отклонен")
+    await bot.send_message(c_id, "Ваши документы не прошли проверку.")
 
 async def main():
     await connect_db()
