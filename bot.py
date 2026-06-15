@@ -53,3 +53,19 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+class Verification(StatesGroup):
+    waiting_for_photo = State()
+
+@dp.message(Command("verify"))
+async def start_verification(message: Message, state: FSMContext):
+    await message.answer("Пришлите фото вашего документа (паспорта) для верификации.")
+    await state.set_state(Verification.waiting_for_photo)
+
+@dp.message(Verification.waiting_for_photo, F.photo)
+async def process_photo(message: Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id
+    # Сохраняем photo_id в БД для курьера
+    await execute("UPDATE couriers SET passport_url = $1 WHERE tg_id = $2", photo_id, message.from_user.id)
+    await message.answer("Документ принят на проверку администратором.")
+    await state.clear()
