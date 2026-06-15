@@ -14,7 +14,8 @@ from database import (
     get_verified_couriers, update_order_status, create_order, 
     cancel_order_db, get_order_courier, get_user_lang, set_user_lang,
     set_passport_photo, verify_courier, delete_inactive_couriers, 
-    update_courier_activity, set_courier_status, get_waiting_orders
+    update_courier_activity, set_courier_status, get_waiting_orders,
+    set_order_waiting  # <--- Добавьте эту строку!
 )
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
