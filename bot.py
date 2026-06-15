@@ -223,6 +223,14 @@ async def check_arrival(callback: CallbackQuery):
     else:
         await callback.answer(f"❌ Вы еще далеко ({int(distance)} м)", show_alert=True)
 
+# Когда курьер нажимает "Доставлено"
+@dp.callback_query(F.data.startswith("delivered_"))
+async def confirm_delivery(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    # Уведомляем клиента, чтобы он подтвердил получение
+    await bot.send_message(client_id, f"Курьер отмечает заказ №{order_id} как доставленный. Вы получили заказ?")
+    # Кнопка для клиента: "Да, всё получено"
+
 async def main():
     await connect_db()
     await init_db()  # <-- ВОТ ЗДЕСЬ ОНО ДОЛЖНО БЫТЬ!
