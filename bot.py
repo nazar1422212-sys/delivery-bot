@@ -69,3 +69,8 @@ async def process_photo(message: Message, state: FSMContext):
     await execute("UPDATE couriers SET passport_url = $1 WHERE tg_id = $2", photo_id, message.from_user.id)
     await message.answer("Документ принят на проверку администратором.")
     await state.clear()
+    def calculate_order(distance):
+    total_price = distance * 10  # 10 лей за км
+    my_fee = total_price * 0.05
+    courier_gets = total_price - my_fee
+    return total_price, my_fee, courier_gets
