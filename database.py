@@ -20,3 +20,11 @@ async def update_courier_verification(tg_id, status: bool):
 
 async def get_verified_couriers():
     return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
+
+
+async def update_order_status(order_id, status, courier_id=None):
+    """Обновляет статус заказа и привязывает курьера"""
+    if courier_id:
+        await execute("UPDATE orders SET status = $1, courier_id = $2 WHERE id = $3", status, courier_id, order_id)
+    else:
+        await execute("UPDATE orders SET status = $1 WHERE id = $2", status, order_id)
