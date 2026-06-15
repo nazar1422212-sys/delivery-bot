@@ -114,3 +114,16 @@ async def get_user_lang(tg_id):
     return row[0]['lang'] if row else 'ru'
     row = await fetch(query)
     return row[0] if row else None
+
+# database.py
+
+async def get_courier_history(courier_id):
+    """Возвращает историю заказов конкретного курьера"""
+    query = """
+    SELECT order_id, rating, created_at 
+    FROM order_history 
+    WHERE courier_id = $1 
+    ORDER BY created_at DESC 
+    LIMIT 10;
+    """
+    return await fetch(query, courier_id)
