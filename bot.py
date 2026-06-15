@@ -10,10 +10,12 @@ from database import *
 from config import TOKEN, ADMIN_ID
 # bot.py
 
+# bot.py
+
 from database import (
-    connect_db, init_db, set_user_role, update_courier_verification, 
+    connect_db, init_db, set_user_role, update_courier_verification, # Теперь она тут есть
     get_verified_couriers, update_order_status, create_order, 
-    cancel_order_db, get_order_courier
+    cancel_order_db, get_order_courier, get_user_lang
 )
 
 bot = Bot(TOKEN)
