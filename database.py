@@ -16,22 +16,22 @@ async def fetch(query, *args):
         return await conn.fetch(query, *args)
 
 async def init_db():
+    # Создаем таблицы, если их нет
     await execute("""
         CREATE TABLE IF NOT EXISTS users (tg_id BIGINT PRIMARY KEY, role TEXT, lang TEXT DEFAULT 'ru');
         CREATE TABLE IF NOT EXISTS couriers (tg_id BIGINT PRIMARY KEY, online BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, card_number TEXT, passport_url TEXT, last_active TIMESTAMP DEFAULT NOW());
-        CREATE TABLE IF NOT EXISTS orders (
-            id SERIAL PRIMARY KEY, client_id BIGINT, courier_id BIGINT, 
-            pickup_address TEXT, delivery_address TEXT, price DOUBLE PRECISION, 
-            status TEXT DEFAULT 'waiting', payment_method TEXT, payment_status TEXT DEFAULT 'pending'
-        );
-        CREATE TABLE IF NOT EXISTS order_history (
-            id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, 
-            price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW()
-        );
+        CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_id BIGINT);
+        CREATE TABLE IF NOT EXISTS order_history (id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW());
     """)
-    await execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS lang TEXT DEFAULT 'ru';")
-    await execute("ALTER TABLE couriers ADD COLUMN IF NOT EXISTS last_active TIMESTAMP DEFAULT NOW();")
-    await execute("ALTER TABLE couriers ADD COLUMN IF NOT EXISTS passport_url TEXT;")
+    
+    # ПРИНУДИТЕЛЬНО добавляем недостающие колонки
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_address TEXT;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'waiting';")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending';")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_id BIGINT;")
 
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
