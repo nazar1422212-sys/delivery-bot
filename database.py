@@ -1,64 +1,34 @@
 import asyncpg
 from config import DATABASE_URL
 
-
-async def connect_db():
-    global pool
-    pool = await asyncpg.create_pool(DATABASE_URL)
-
-async def execute(query, *args):
-    async with pool.acquire() as conn:
-        return await conn.execute(query, *args)
-
-async def fetch(query, *args):
-    async with pool.acquire() as conn:
-        return await conn.fetch(query, *args)
-
-# Функции для курьеров
-async def get_verified_couriers():
-    return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
-
-async def update_courier_verification(tg_id, status: bool):
-    await execute("UPDATE couriers SET is_verified = $1 WHERE tg_id = $2", status, tg_id)
-
 pool = None
 
 async def connect_db():
     global pool
-    pool = await asyncpg.create_pool(DATABASE_URL)
-
-# Упрощенный доступ к пулу
-async def fetch(query, *args):
-    async with pool.acquire() as conn:
-        return await conn.fetch(query, *args)
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
 
 async def execute(query, *args):
     async with pool.acquire() as conn:
         return await conn.execute(query, *args)
 
+async def fetch(query, *args):
+    async with pool.acquire() as conn:
+        return await conn.fetch(query, *args)
+
+async def fetchrow(query, *args):
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(query, *args)
+
+async def get_verified_couriers():
+    return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
+
+async def update_courier_verification(tg_id, status: bool):
+    await execute("UPDATE couriers SET is_verified = 10 WHERE tg_id = 20", status, tg_id)
+
 async def create_order(client_id, p_lat, p_lon, d_lat, d_lon, distance):
-    price = round(distance * 10.0, 2)  # Расчет цены в леях 
-    return await fetch(
-        "INSERT INTO orders (client_id, pickup_lat, pickup_lon, delivery_lat, delivery_lon, distance, price, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING id",
+    price = round(distance * 10.0, 2)
+    return await fetchrow(
+        "INSERT INTO orders (client_id, pickup_lat, pickup_lon, delivery_lat, delivery_lon, distance, price, status) "
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING id",
         client_id, p_lat, p_lon, d_lat, d_lon, distance, price
     )
-    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram import F
-
-ADMIN_ID = 123456789 # Вставьте сюда ваш ID
-
-@dp.message(CourierVerification.waiting_for_doc, F.photo)
-async def handle_photo(message: Message, state: FSMContext):
-    photo_id = message.photo[-1].file_id
-    
-    # Отправляем админу фото и кнопки
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Принять", callback_data=f"approve_{message.from_user.id}")],
-        [InlineKeyboardButton(text="❌ Отказать", callback_data=f"reject_{message.from_user.id}")]
-    ])
-    
-    await bot.send_photo(ADMIN_ID, photo_id, caption=f"Курьер {message.from_user.id} прислал доки.", reply_markup=kb)
-    await message.answer("Ваши документы отправлены на проверку.")
-    await state.clear()
-    async def get_verified_couriers_full():
-    return await fetch("SELECT * FROM couriers WHERE is_verified = TRUE AND online = TRUE")
