@@ -62,8 +62,6 @@ async def start_order(message: Message, state: FSMContext):
     await message.answer("Введите адрес, откуда забрать:")
     await state.set_state(OrderForm.pickup)
 
-# --- Обновленные обработчики ---
-
 @dp.message(OrderForm.pickup)
 async def process_pickup(message: Message, state: FSMContext):
     if message.location:
@@ -90,24 +88,42 @@ async def process_delivery(message: Message, state: FSMContext):
 
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    # 1. ОБЯЗАТЕЛЬНО отвечаем на колбэк, чтобы убрать "зависание" кнопки
-    await callback.answer() 
+    """Handle order finalization with price calculation"""
+    await callback.answer()
     
     method = callback.data.split("_")[1]
     data = await state.get_data()
     
-    # 2. Создаем заказ в БД
-    order_id = await create_order(callback.from_user.id, data['pickup'], data['delivery'], 50.0, method)
+    # Validate required data
+    if not data or ('pickup' not in data and 'pickup_lat' not in data):
+        await callback.message.edit_text("❌ Ошибка: данные заказа не найдены. Начните заново /order")
+        await state.clear()
+        return
     
-    if order_id:
-        await set_order_waiting(order_id)
+    # Calculate price based on available data
+    price, dist = await calculate_price(data)
+    
+    # Create order in database
+    try:
+        order_id = await create_order(
+            callback.from_user.id, 
+            data.get('pickup', 'Coordinates provided'), 
+            data.get('delivery', 'Coordinates provided'), 
+            price, 
+            method
+        )
         
-        # 3. Сообщаем пользователю
-        await callback.message.edit_text(f"✅ Заказ №{order_id} создан и поставлен в очередь!")
-    else:
+        if order_id:
+            await set_order_waiting(order_id)
+            await callback.message.edit_text(
+                f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей."
+            )
+        else:
+            await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
+    except Exception as e:
+        print(f"ERROR: Failed to create order: {e}")
         await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
     
-    # 4. ОЧИЩАЕМ состояние FSM, чтобы бот вернулся в обычный режим
     await state.clear()
 
 @dp.message(F.photo)
@@ -148,65 +164,64 @@ async def go_offline(message: Message):
 async def help_command(message: Message):
     await message.answer("🆘 *Помощь:*\n📦 /order - Заказ\n🚚 /online - Онлайн\n💤 /offline - Офлайн\n💳 /setcard - Карта")
 
-def calculate_price(data):
-    # Если есть координаты (lat/lon)
+async def calculate_price(data):
+    """Calculate price based on either coordinates or address strings"""
+    # If coordinates are available
     if 'pickup_lat' in data and 'delivery_lat' in data:
-        dist = geodesic((data['pickup_lat'], data['pickup_lon']), 
-                        (data['delivery_lat'], data['delivery_lon'])).km
+        try:
+            dist = geodesic(
+                (data['pickup_lat'], data['pickup_lon']), 
+                (data['delivery_lat'], data['delivery_lon'])
+            ).km
+        except Exception as e:
+            print(f"ERROR: Failed to calculate distance from coordinates: {e}")
+            dist = 5.0
     else:
-        # Если только текст (старая логика)
-        # ... ваш код с Nominatim ...
-        dist = 5.0 # Заглушка, если текст не распознан
+        # Calculate using address strings
+        dist = await get_distance(data.get('pickup', ''), data.get('delivery', ''))
     
     price = 50 + (dist * 10)
     return round(price, 0), round(dist, 1)
 
-
-
-# Функция расчета стоимости
-def calculate_price(addr1, addr2):
-    geolocator = Nominatim(user_agent="delivery_bot_v1") # Смените user_agent
+async def get_distance(addr1, addr2):
+    """Get distance between two addresses using geocoding"""
+    if not addr1 or not addr2:
+        return 5.0
+    
+    geolocator = Nominatim(user_agent="delivery_bot_v1")
     try:
         loc1 = geolocator.geocode(addr1, language='ru')
         loc2 = geolocator.geocode(addr2, language='ru')
         
         if not loc1 or not loc2:
-            print(f"DEBUG: Не удалось найти координаты для: {addr1} или {addr2}")
-            return 50.0, 0
-            
+            print(f"DEBUG: Could not find coordinates for: {addr1} or {addr2}")
+            return 5.0
+        
         dist = geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
-        price = 50 + (dist * 10)
-        return round(price, 0), round(dist, 1)
+        return round(dist, 1)
     except Exception as e:
-        print(f"DEBUG: Ошибка геокодирования: {e}")
-        return 50.0, 0
+        print(f"ERROR: Geocoding failed: {e}")
+        return 5.0
 
-# В функции finalize_order теперь расчет цены:
-@dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
-async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    method = callback.data.split("_")[1]
-    data = await state.get_data()
-    
-    # Считаем цену и расстояние
-    price, dist = calculate_price(data['pickup'], data['delivery'])
-    
-    # Сохраняем в БД с учетом рассчитанной цены
-    order_id = await create_order(callback.from_user.id, data['pickup'], data['delivery'], price, method)
-    await set_order_waiting(order_id)
-    
-    await callback.message.edit_text(f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.")
-    await state.clear()
-
-
-def get_distance(addr1, addr2):
-    geolocator = Nominatim(user_agent="delivery_bot")
-    try:
-        loc1 = geolocator.geocode(addr1)
-        loc2 = geolocator.geocode(addr2)
-        return round(geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km, 1)
-    except:
-        return "?" # Если адрес не найден
+async def check_queue():
+    """Check waiting orders queue and assign to available couriers"""
+    while True:
+        try:
+            waiting_orders = await get_waiting_orders()
+            verified_couriers = await get_verified_couriers()
+            
+            if waiting_orders and verified_couriers:
+                # Simple assignment: first available courier gets first order
+                for order in waiting_orders:
+                    for courier in verified_couriers:
+                        await update_order_status(order['id'], 'assigned', courier['id'])
+                        await bot.send_message(courier['id'], f"📦 Новый заказ №{order['id']}")
+                        break
+        except Exception as e:
+            print(f"ERROR in check_queue: {e}")
+        
+        # Check queue every 10 seconds
+        await asyncio.sleep(10)
 
 async def main():
     await connect_db()
