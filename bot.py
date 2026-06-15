@@ -121,5 +121,26 @@ async def approve_courier(callback: CallbackQuery):
     await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
     await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! Теперь вы можете работать: /online")
 
+# bot.py
+
+# ... (ваш код выше) ...
+
+# Добавьте сюда обработчики команд для курьеров
+@dp.message(Command("online"))
+async def go_online(message: Message):
+    # Убедитесь, что функции set_courier_status и update_courier_activity импортированы из database
+    await set_courier_status(message.from_user.id, True)
+    await update_courier_activity(message.from_user.id) # Сброс счетчика удаления
+    await message.answer("✅ Вы онлайн! Теперь вы будете получать заказы.")
+
+@dp.message(Command("offline"))
+async def go_offline(message: Message):
+    await set_courier_status(message.from_user.id, False)
+    # Здесь можно тоже обновить активность, если хотите
+    await update_courier_activity(message.from_user.id) 
+    await message.answer("💤 Вы ушли с линии.")
+
+# ... (ваш остальной код, например функция main()) ...
+
 if __name__ == "__main__":
     asyncio.run(main())
