@@ -158,17 +158,21 @@ async def check_queue():
 
 # Функция расчета стоимости
 def calculate_price(addr1, addr2):
-    geolocator = Nominatim(user_agent="delivery_bot")
+    geolocator = Nominatim(user_agent="delivery_bot_v1") # Смените user_agent
     try:
-        loc1 = geolocator.geocode(addr1)
-        loc2 = geolocator.geocode(addr2)
-        dist = geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
+        loc1 = geolocator.geocode(addr1, language='ru')
+        loc2 = geolocator.geocode(addr2, language='ru')
         
-        # 50 лей база + 10 лей за каждый км
+        if not loc1 or not loc2:
+            print(f"DEBUG: Не удалось найти координаты для: {addr1} или {addr2}")
+            return 50.0, 0
+            
+        dist = geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
         price = 50 + (dist * 10)
         return round(price, 0), round(dist, 1)
-    except:
-        return 50.0, 0 # Если адрес не найден, возвращаем базу
+    except Exception as e:
+        print(f"DEBUG: Ошибка геокодирования: {e}")
+        return 50.0, 0
 
 # В функции finalize_order теперь расчет цены:
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
