@@ -28,3 +28,6 @@ async def update_order_status(order_id, status, courier_id=None):
         await execute("UPDATE orders SET status = $1, courier_id = $2 WHERE id = $3", status, courier_id, order_id)
     else:
         await execute("UPDATE orders SET status = $1 WHERE id = $2", status, order_id)
+
+async def set_user_role(tg_id, role):
+    await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
