@@ -65,3 +65,8 @@ async def init_db():
     );
     ...
     """
+# Добавьте в database.py
+async def get_nearby_couriers(p_lat, p_lon):
+    # Запрос выбирает курьеров, у которых есть координаты
+    # (В идеале здесь формула расстояния, но для начала возьмем всех доступных)
+    return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
