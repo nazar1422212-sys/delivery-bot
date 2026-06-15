@@ -5,7 +5,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from geopy.distance import geodesic
-
+from database import connect_db, init_db
 from config import TOKEN, ADMIN_ID
 from database import connect_db, update_courier_verification, get_verified_couriers, update_order_status, create_order, set_user_role
 from keep_alive import run_web
@@ -107,9 +107,10 @@ async def finish_order(callback: CallbackQuery):
 # ... (здесь импорты и все обработчики @dp.message ...)
 
 async def main():
-    await connect_db()       # Подключаемся к БД
-    await init_db()          # Создаем таблицы, если их нет
-    await dp.start_polling(bot)  # Запускаем бота
+    await connect_db()
+    await init_db()  # <-- ВОТ ЗДЕСЬ ОНО ДОЛЖНО БЫТЬ!
+    print("База данных инициализирована.")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
