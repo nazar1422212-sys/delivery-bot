@@ -8,6 +8,33 @@ from keep_alive import run_web
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from database import get_verified_couriers
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from config import TOKEN, ADMIN_ID
+from database import connect_db, execute, update_courier_verification
+
+bot = Bot(TOKEN)
+dp = Dispatcher()
+
+# Обработка верификации (Фото от курьера -> Админу)
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_courier(callback: CallbackQuery):
+    c_id = int(callback.data.split("_")[1])
+    await update_courier_verification(c_id, True)
+    await callback.message.edit_caption(caption="✅ Курьер одобрен")
+    await bot.send_message(c_id, "Ваш аккаунт подтвержден! Вы можете принимать заказы.")
+
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_courier(callback: CallbackQuery):
+    c_id = int(callback.data.split("_")[1])
+    await callback.message.edit_caption(caption="❌ Курьер отклонен")
+    await bot.send_message(c_id, "Ваши документы не прошли проверку.")
+
+# Логика прибытия (Кнопка в заказе)
+@dp.callback_query(F.data == "arrived")
+async def courier_arrived(callback: CallbackQuery):
+    # Здесь логика: проверить 100 метров, изменить статус заказа в БД на 'finished'
+    await callback.answer("Статус заказа обновлен!")
 
 async def notify_couriers(order_info):
     couriers = await get_verified_couriers()
