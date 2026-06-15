@@ -62,19 +62,30 @@ async def start_order(message: Message, state: FSMContext):
     await message.answer("Введите адрес, откуда забрать:")
     await state.set_state(OrderForm.pickup)
 
+# --- Обновленные обработчики ---
+
 @dp.message(OrderForm.pickup)
 async def process_pickup(message: Message, state: FSMContext):
-    await state.update_data(pickup=message.text)
-    await message.answer("Введите адрес доставки:")
+    if message.location:
+        await state.update_data(pickup_lat=message.location.latitude, pickup_lon=message.location.longitude)
+    else:
+        await state.update_data(pickup=message.text)
+    
+    await message.answer("📍 Введите адрес доставки (или отправьте геопозицию):")
     await state.set_state(OrderForm.delivery)
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
-    await state.update_data(delivery=message.text)
+    if message.location:
+        await state.update_data(delivery_lat=message.location.latitude, delivery_lon=message.location.longitude)
+    else:
+        await state.update_data(delivery=message.text)
+    
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
+        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), 
+         InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
     ])
-    await message.answer("Выберите способ оплаты:", reply_markup=kb)
+    await message.answer("✅ Выберите способ оплаты:", reply_markup=kb)
     await state.set_state(OrderForm.payment_method)
 
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
