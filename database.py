@@ -16,36 +16,62 @@ async def fetch(query, *args):
         return await conn.fetch(query, *args)
 
 async def init_db():
-    # Создаем таблицы (включая order_history с правильными полями)
     await execute("""
+        CREATE TABLE IF NOT EXISTS users (tg_id BIGINT PRIMARY KEY, role TEXT, lang TEXT DEFAULT 'ru');
+        CREATE TABLE IF NOT EXISTS couriers (tg_id BIGINT PRIMARY KEY, online BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, card_number TEXT);
+        CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY, client_id BIGINT, courier_id BIGINT, 
+            pickup_address TEXT, delivery_address TEXT, price DOUBLE PRECISION, 
+            status TEXT DEFAULT 'waiting', payment_method TEXT, payment_status TEXT DEFAULT 'pending'
+        );
         CREATE TABLE IF NOT EXISTS order_history (
-            id SERIAL PRIMARY KEY,
-            order_id INT,
-            courier_id BIGINT,
-            price DOUBLE PRECISION,
-            rating INT,
-            comment TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
+            id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, 
+            price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW()
         );
     """)
 
-async def add_review(order_id, courier_id, price, rating, comment):
-    query = "INSERT INTO order_history (order_id, courier_id, price, rating, comment) VALUES ($1, $2, $3, $4, $5)"
-    await execute(query, order_id, courier_id, price, rating, comment)
+# Функции ролей и статусов
+async def set_user_role(tg_id, role):
+    await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
 
-async def get_waiting_orders():
-    return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+async def set_courier_status(tg_id, status: bool):
+    await execute("UPDATE couriers SET online = $1 WHERE tg_id = $2", status, tg_id)
+
+async def get_verified_couriers():
+    return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
+
+# Функции заказов и очереди
+async def create_order(client_id, pickup, delivery, price, payment_method):
+    row = await fetch("INSERT INTO orders (client_id, pickup_address, delivery_address, price, payment_method) VALUES ($1, $2, $3, $4, $5) RETURNING id", 
+                      client_id, pickup, delivery, price, payment_method)
+    return row[0][0]
 
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
 
-async def count_online_couriers():
-    row = await fetch("SELECT COUNT(*) FROM couriers WHERE online = TRUE AND is_verified = TRUE")
-    return row[0][0]
+async def get_waiting_orders():
+    return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+
+async def update_order_status(order_id, status, courier_id=None):
+    if courier_id:
+        await execute("UPDATE orders SET status = $1, courier_id = $2 WHERE id = $3", status, courier_id, order_id)
+    else:
+        await execute("UPDATE orders SET status = $1 WHERE id = $2", status, order_id)
+
+# Статистика и история
+async def add_review(order_id, courier_id, price, rating, comment):
+    await execute("INSERT INTO order_history (order_id, courier_id, price, rating, comment) VALUES ($1, $2, $3, $4, $5)", order_id, courier_id, price, rating, comment)
+
+async def get_courier_history(courier_id):
+    return await fetch("SELECT order_id, price, rating FROM order_history WHERE courier_id = $1 ORDER BY created_at DESC LIMIT 10", courier_id)
+
+async def get_stats_data():
+    row = await fetch("SELECT COUNT(*) as total_orders, AVG(rating) as avg_rating FROM order_history")
+    return row[0]
 
 async def get_user_lang(tg_id):
     row = await fetch("SELECT lang FROM users WHERE tg_id = $1", tg_id)
     return row[0]['lang'] if row else 'ru'
 
-async def get_courier_history(courier_id):
-    return await fetch("SELECT order_id, price, rating FROM order_history WHERE courier_id = $1 ORDER BY created_at DESC LIMIT 10", courier_id)
+async def set_user_lang(tg_id, lang):
+    await execute("UPDATE users SET lang = $1 WHERE tg_id = $2", lang, tg_id)
