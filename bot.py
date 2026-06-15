@@ -187,6 +187,24 @@ async def process_delivery(message: Message, state: FSMContext):
         # Рассылка курьерам (как мы делали раньше)
         ...
 
+# bot.py
+
+async def check_queue():
+    while True:
+        # Ищем заказы, которые ждут курьера
+        orders = await get_waiting_orders()
+        for order in orders:
+            # Если есть хоть один онлайн курьер, отправляем ему заказ
+            couriers = await get_verified_couriers() 
+            if couriers:
+                for c in couriers:
+                    # Уведомляем курьера о заказе из очереди
+                    await bot.send_message(c['tg_id'], f"🔔 Появился заказ №{order['id']} из очереди!")
+                # Обновляем статус, чтобы не спамить
+                await update_order_status(order['id'], 'pending')
+        
+        await asyncio.sleep(30) # Пауза 30 секунд между проверками
+
 async def main():
     await connect_db()
     await init_db()
