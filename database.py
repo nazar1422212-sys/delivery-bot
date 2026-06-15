@@ -119,6 +119,12 @@ async def delete_inactive_couriers():
     """
     await execute(query)
 
+# Добавьте в database.py
+
+async def update_courier_verification(tg_id, is_verified: bool):
+    """Обновляет статус верификации курьера (True или False)"""
+    await execute("UPDATE couriers SET is_verified = $1 WHERE tg_id = $2", is_verified, tg_id)
+
 # database.py
 async def update_courier_activity(tg_id):
     await execute("UPDATE couriers SET last_active = NOW() WHERE tg_id = $1", tg_id)
