@@ -129,6 +129,30 @@ async def show_stats(message: Message):
     else:
         await message.answer("Статистики пока нет.")
 
+# bot.py
+
+@dp.message(Command("start"))
+async def start(message: Message):
+    # Кнопки выбора языка
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru")],
+        [InlineKeyboardButton(text="🇷🇴 Română", callback_data="lang_ro")]
+    ])
+    await message.answer("Выберите язык / Alegeți limba:", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("lang_"))
+async def set_lang(callback: CallbackQuery):
+    lang = callback.data.split("_")[1]
+    await set_user_lang(callback.from_user.id, lang)
+    
+    # После выбора языка показываем выбор роли на нужном языке
+    text = get_text('welcome', lang)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_text('client', lang), callback_data="role_client")],
+        [InlineKeyboardButton(text=get_text('courier', lang), callback_data="role_courier")]
+    ])
+    await callback.message.edit_text(text, reply_markup=kb)
+
 async def main():
     await connect_db()
     await init_db()
