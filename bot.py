@@ -9,6 +9,9 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from translations import get_text
 from config import TOKEN, ADMIN_ID
+from geopy.distance import geodesic
+from geopy.geocoders import Nominatim
+
 from database import (
     connect_db, init_db, set_user_role, update_courier_verification, 
     get_verified_couriers, update_order_status, create_order, 
@@ -151,6 +154,16 @@ async def check_queue():
                 await bot.send_message(couriers[0]['tg_id'], text, parse_mode="Markdown")
                 await update_order_status(order['id'], 'pending')
         await asyncio.sleep(60)
+
+
+def get_distance(addr1, addr2):
+    geolocator = Nominatim(user_agent="delivery_bot")
+    try:
+        loc1 = geolocator.geocode(addr1)
+        loc2 = geolocator.geocode(addr2)
+        return round(geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km, 1)
+    except:
+        return "?" # Если адрес не найден
 
 async def main():
     await connect_db()
