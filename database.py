@@ -78,14 +78,15 @@ async def set_user_lang(tg_id, lang):
 
 # database.py
 
-async def get_pending_couriers():
-    """Получает список курьеров, которые отправили паспорт, но еще не проверены"""
-    return await fetch("SELECT tg_id, passport_url FROM couriers WHERE is_verified = FALSE AND passport_url IS NOT NULL")
-
-async def verify_courier(tg_id):
-    """Одобрить курьера"""
-    await execute("UPDATE couriers SET is_verified = TRUE WHERE tg_id = $1", tg_id)
+# Добавьте в конец файла database.py
 
 async def set_passport_photo(tg_id, photo_id):
-    """Сохранить ID фото паспорта"""
+    """Сохранить ID фото паспорта курьера"""
     await execute("UPDATE couriers SET passport_url = $1 WHERE tg_id = $2", photo_id, tg_id)
+
+async def verify_courier(tg_id):
+    """Одобрить курьера админом"""
+    await execute("UPDATE couriers SET is_verified = TRUE WHERE tg_id = $1", tg_id)
+
+# Функции для истории уже были (add_review и get_courier_history), 
+# убедитесь, что они тоже есть в database.py
