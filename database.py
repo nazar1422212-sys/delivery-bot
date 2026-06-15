@@ -7,13 +7,16 @@ async def connect_db():
     global pool
     pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=10)
 
+# database.py
+
 async def init_db():
     query = """
-    -- существующие таблицы --
+    -- ... ваши таблицы ...
     CREATE TABLE IF NOT EXISTS order_history (
         id SERIAL PRIMARY KEY,
         order_id INT,
         courier_id BIGINT,
+        price DOUBLE PRECISION,  -- Новая колонка
         rating INT,
         comment TEXT,
         created_at TIMESTAMP DEFAULT NOW()
