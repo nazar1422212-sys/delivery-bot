@@ -72,9 +72,11 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 # bot.py
 
+# bot.py
+
 async def check_queue():
     while True:
-        # 1. Проверяем очередь заказов
+        # 1. Проверяем очередь заказов (часто)
         orders = await get_waiting_orders()
         for order in orders:
             couriers = await get_verified_couriers()
@@ -82,10 +84,12 @@ async def check_queue():
                 await bot.send_message(couriers[0]['tg_id'], f"🔔 Новый заказ №{order['id']}!")
                 await update_order_status(order['id'], 'pending')
         
-        # 2. Раз в сутки (или при каждом цикле) проводим очистку
+        # 2. Очистка неактивных (редко, раз в 24 часа)
+        # Чтобы не писать сложный таймер, можно проверять время внутри цикла
         await delete_inactive_couriers()
         
-        await asyncio.sleep(86400) # Пауза 24 часа (86400 секунд), чтобы не грузить базу
+        # Пауза 86400 секунд = 24 часа
+        await asyncio.sleep(86400)
 
 async def main():
     await connect_db()
