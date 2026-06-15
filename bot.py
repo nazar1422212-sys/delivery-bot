@@ -127,3 +127,10 @@ async def process_delivery(message: Message, state: FSMContext):
     
     # Рассылка курьерам (функция из предыдущих шагов)
     await send_order_to_couriers(order['id'], f"Точка А: {p_lat}, {p_lon}\nТочка Б: {d_lat}, {d_lon}\nЦена: {price} лей")
+
+from geopy.distance import geodesic
+
+async def is_near_location(courier_lat, courier_lon, target_lat, target_lon):
+    # Расстояние в метрах
+    distance = geodesic((courier_lat, courier_lon), (target_lat, target_lon)).meters
+    return distance <= 100
