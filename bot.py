@@ -136,16 +136,20 @@ async def help_command(message: Message):
 
 async def check_queue():
     while True:
-        try:
-            orders = await get_waiting_orders()
-            for order in orders:
-                couriers = await get_verified_couriers()
-                if couriers:
-                    await bot.send_message(couriers[0]['tg_id'], f"🔔 Новый заказ №{order['id']}!")
-                    await update_order_status(order['id'], 'pending')
-            await delete_inactive_couriers()
-        except Exception as e:
-            print(f"Error in check_queue: {e}")
+        orders = await get_waiting_orders()
+        for order in orders:
+            # orders - это список словарей/рядов из базы
+            couriers = await get_verified_couriers()
+            if couriers:
+                # ВАЖНО: берем данные из объекта order
+                text = (f"🔔 **Новый заказ №{order['id']}**\n"
+                        f"📍 Откуда: {order['pickup_address']}\n"
+                        f"🏁 Куда: {order['delivery_address']}\n"
+                        f"💰 Цена: {order['price']} леев\n"
+                        f"🗺 [Открыть в Google Maps](https://www.google.com/maps/search/?api=1&query={order['delivery_address'].replace(' ', '+')})")
+                
+                await bot.send_message(couriers[0]['tg_id'], text, parse_mode="Markdown")
+                await update_order_status(order['id'], 'pending')
         await asyncio.sleep(60)
 
 async def main():
