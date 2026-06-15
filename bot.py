@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from geopy.distance import geodesic
 
 from config import TOKEN, ADMIN_ID
-from database import connect_db, execute, update_courier_verification
+from database import connect_db, execute, update_courier_verification, get_verified_couriers, update_order_status, create_order, set_user_role
 from keep_alive import run_web
 
 # Запуск веб-сервера для Render
@@ -16,15 +16,30 @@ run_web()
 bot = Bot(TOKEN)
 dp = Dispatcher()
 
-# Состояния
+# --- Состояния ---
 class CourierVerification(StatesGroup):
     waiting_for_doc = State()
 
+class OrderForm(StatesGroup):
+    pickup = State()
+    delivery = State()
+
+# --- 1. Регистрация роли (для разделения Клиент/Курьер) ---
 @dp.message(Command("start"))
 async def start(message: Message):
-    await message.answer("Бот доставки запущен. Используйте /verify для регистрации курьера.")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Я Клиент", callback_data="role_client")],
+        [InlineKeyboardButton(text="Я Курьер", callback_data="role_courier")]
+    ])
+    await message.answer("Добро пожаловать! Кто вы?", reply_markup=kb)
 
-# Верификация
+@dp.callback_query(F.data.startswith("role_"))
+async def set_role(callback: CallbackQuery):
+    role = callback.data.split("_")[1]
+    await set_user_role(callback.from_user.id, role)
+    await callback.message.edit_text(f"Вы зарегистрированы как {role.capitalize()}.")
+
+# --- 2. Верификация курьера ---
 @dp.message(Command("verify"))
 async def start_verify(message: Message, state: FSMContext):
     await message.answer("Пришлите фото вашего паспорта.")
@@ -39,9 +54,8 @@ async def handle_photo(message: Message, state: FSMContext):
     ])
     await bot.send_photo(ADMIN_ID, photo_id, caption=f"Курьер {message.from_user.id} на проверке.", reply_markup=kb)
     await state.clear()
-    await message.answer("Документы отправлены на проверку.")
+    await message.answer("Документы отправлены.")
 
-# Обработка ответов админа
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_courier(callback: CallbackQuery):
     c_id = int(callback.data.split("_")[1])
@@ -49,11 +63,52 @@ async def approve_courier(callback: CallbackQuery):
     await callback.message.edit_caption(caption="✅ Курьер одобрен")
     await bot.send_message(c_id, "Ваш профиль подтвержден!")
 
-@dp.callback_query(F.data.startswith("reject_"))
-async def reject_courier(callback: CallbackQuery):
-    c_id = int(callback.data.split("_")[1])
-    await callback.message.edit_caption(caption="❌ Курьер отклонен")
-    await bot.send_message(c_id, "Ваши документы не прошли проверку.")
+# --- 3. Логика заказа ---
+async def send_order_to_couriers(order_id, order_info):
+    couriers = await get_verified_couriers()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order_id}")],
+        [InlineKeyboardButton(text="❌ Отказать", callback_data=f"decline_{order_id}")]
+    ])
+    for courier in couriers:
+        await bot.send_message(courier['tg_id'], f"Новый заказ #{order_id}!\n{order_info}", reply_markup=kb)
+
+@dp.message(Command("order"))
+async def start_order(message: Message, state: FSMContext):
+    await message.answer("Отправьте геолокацию точки А.")
+    await state.set_state(OrderForm.pickup)
+
+@dp.message(OrderForm.pickup, F.location)
+async def process_pickup(message: Message, state: FSMContext):
+    await state.update_data(pickup=(message.location.latitude, message.location.longitude))
+    await message.answer("Отправьте геолокацию точки Б.")
+    await state.set_state(OrderForm.delivery)
+
+@dp.message(OrderForm.delivery, F.location)
+async def process_delivery(message: Message, state: FSMContext):
+    data = await state.get_data()
+    p_lat, p_lon = data['pickup']
+    order = await create_order(message.from_user.id, p_lat, p_lon, message.location.latitude, message.location.longitude, 5.0)
+    await message.answer("Заказ создан!")
+    await state.clear()
+    await send_order_to_couriers(order['id'], f"Цена: {order['price']} лей")
+
+# --- 4. Логика курьера (Принятие, на месте, оплата) ---
+@dp.callback_query(F.data.startswith("accept_"))
+async def accept_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    await update_order_status(order_id, 'accepted', callback.from_user.id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📍 Я на месте", callback_data=f"arrived_{order_id}")],
+        [InlineKeyboardButton(text="💰 Получил оплату", callback_data=f"paid_{order_id}")]
+    ])
+    await callback.message.edit_text("Вы приняли заказ! Жмите 'Я на месте' при прибытии.", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("paid_"))
+async def finish_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    await update_order_status(order_id, 'finished')
+    await callback.message.edit_text("Заказ успешно закрыт. Спасибо!")
 
 async def main():
     await connect_db()
@@ -61,102 +116,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-# bot.py
-
-# Функция для отправки заказа курьеру
-async def send_order_to_couriers(order_id, order_info):
-    couriers = await get_verified_couriers()
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order_id}"),
-            InlineKeyboardButton(text="❌ Отказать", callback_data=f"decline_{order_id}")
-        ]
-    ])
-    
-    for courier in couriers:
-        await bot.send_message(courier['tg_id'], f"Новый заказ #{order_id}!\n{order_info}", reply_markup=kb)
-
-# Обработчик принятия заказа
-@dp.callback_query(F.data.startswith("accept_"))
-async def accept_order(callback: CallbackQuery):
-    order_id = int(callback.data.split("_")[1])
-    courier_id = callback.from_user.id
-    
-    # Проверяем, не занят ли уже заказ другим курьером (в БД)
-    # Если свободен:
-    await update_order_status(order_id, 'accepted', courier_id)
-    await callback.message.edit_text("Вы приняли заказ! Отправляйтесь на точку А.")
-    # Тут можно добавить логику отправки контактов клиента курьеру
-
-# Обработчик отказа
-@dp.callback_query(F.data.startswith("decline_"))
-async def decline_order(callback: CallbackQuery):
-    await callback.message.edit_text("Вы отказались от заказа.")
-
-# Состояние заказа
-class OrderForm(StatesGroup):
-    pickup = State()
-    delivery = State()
-
-@dp.message(Command("order"))
-async def start_order(message: Message, state: FSMContext):
-    await message.answer("Отправьте геолокацию точки А (посадка).")
-    await state.set_state(OrderForm.pickup)
-
-@dp.message(OrderForm.pickup, F.location)
-async def process_pickup(message: Message, state: FSMContext):
-    await state.update_data(pickup=(message.location.latitude, message.location.longitude))
-    await message.answer("Отправьте геолокацию точки Б (доставка).")
-    await state.set_state(OrderForm.delivery)
-
-@dp.message(OrderForm.delivery, F.location)
-async def process_delivery(message: Message, state: FSMContext):
-    data = await state.get_data()
-    p_lat, p_lon = data['pickup']
-    d_lat, d_lon = message.location.latitude, message.location.longitude
-    
-    # Расчет (упрощенно, как прямая линия)
-    distance = ((d_lat - p_lat)**2 + (d_lon - p_lon)**2)**0.5 * 111 
-    price = round(distance * 10.0, 2)
-    
-    # Сохранение в БД
-    order = await create_order(message.from_user.id, p_lat, p_lon, d_lat, d_lon, distance)
-    
-    await message.answer(f"Заказ создан! Стоимость: {price} лей.\nОплата: Наличными курьеру.")
-    await state.clear()
-    
-    # Рассылка курьерам (функция из предыдущих шагов)
-    await send_order_to_couriers(order['id'], f"Точка А: {p_lat}, {p_lon}\nТочка Б: {d_lat}, {d_lon}\nЦена: {price} лей")
-
- # Не забудьте добавить этот импорт в начало файла
-
-# 1. Проверка дистанции (100 метров)
-async def is_near_location(courier_lat, courier_lon, target_lat, target_lon):
-    return geodesic((courier_lat, courier_lon), (target_lon, target_lon)).meters <= 100
-
-# 2. Обработка нажатия "Принять заказ"
-@dp.callback_query(F.data.startswith("accept_"))
-async def accept_order(callback: CallbackQuery):
-    order_id = int(callback.data.split("_")[1])
-    # Тут можно вызвать функцию update_order_status(order_id, 'accepted', callback.from_user.id)
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"arrived_{order_id}")],
-        [InlineKeyboardButton(text="💰 Оплата получена", callback_data=f"paid_{order_id}")]
-    ])
-    await callback.message.edit_text("Вы приняли заказ! Жмите 'Я на месте' при прибытии.", reply_markup=kb)
-
-# 3. Обработка прибытия
-@dp.callback_query(F.data.startswith("arrived_"))
-async def courier_arrived(callback: CallbackQuery):
-    # Здесь нужно добавить логику проверки координат (через состояние или базу данных)
-    await callback.answer("Уведомление клиенту отправлено!")
-    # await bot.send_message(client_id, "Курьер прибыл на место!")
-
-# 4. Обработка завершения (Оплата получена)
-@dp.callback_query(F.data.startswith("paid_"))
-async def finish_order(callback: CallbackQuery):
-    order_id = int(callback.data.split("_")[1])
-    # await update_order_status(order_id, 'finished')
-    await callback.message.edit_text("Заказ успешно закрыт. Спасибо за работу!")
