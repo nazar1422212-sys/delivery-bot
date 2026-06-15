@@ -60,3 +60,35 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# bot.py
+
+# Функция для отправки заказа курьеру
+async def send_order_to_couriers(order_id, order_info):
+    couriers = await get_verified_couriers()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order_id}"),
+            InlineKeyboardButton(text="❌ Отказать", callback_data=f"decline_{order_id}")
+        ]
+    ])
+    
+    for courier in couriers:
+        await bot.send_message(courier['tg_id'], f"Новый заказ #{order_id}!\n{order_info}", reply_markup=kb)
+
+# Обработчик принятия заказа
+@dp.callback_query(F.data.startswith("accept_"))
+async def accept_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    courier_id = callback.from_user.id
+    
+    # Проверяем, не занят ли уже заказ другим курьером (в БД)
+    # Если свободен:
+    await update_order_status(order_id, 'accepted', courier_id)
+    await callback.message.edit_text("Вы приняли заказ! Отправляйтесь на точку А.")
+    # Тут можно добавить логику отправки контактов клиента курьеру
+
+# Обработчик отказа
+@dp.callback_query(F.data.startswith("decline_"))
+async def decline_order(callback: CallbackQuery):
+    await callback.message.edit_text("Вы отказались от заказа.")
