@@ -110,6 +110,25 @@ async def process_review(callback: CallbackQuery):
     await add_review(int(order_id), int(courier_id), int(rating), "Без комментария")
     await callback.message.edit_text("Спасибо за ваш отзыв! 🙏")
 
+# bot.py
+
+@dp.message(Command("stats"))
+async def show_stats(message: Message):
+    # Проверка на то, является ли пользователь админом (из конфига)
+    if message.from_user.id != ADMIN_ID:
+        return 
+
+    stats = await get_stats_data()
+    
+    if stats:
+        await message.answer(
+            f"📊 **Статистика работы:**\n\n"
+            f"✅ Всего заказов: {stats['total_orders']}\n"
+            f"⭐ Средний рейтинг: {round(stats['avg_rating'] or 0, 2)}"
+        )
+    else:
+        await message.answer("Статистики пока нет.")
+
 async def main():
     await connect_db()
     await init_db()
