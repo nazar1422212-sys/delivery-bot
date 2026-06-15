@@ -8,6 +8,11 @@ from translations import get_text
 import keep_alive
 from database import *
 from config import TOKEN, ADMIN_ID
+from database import (
+    # ... ваши другие функции ...
+    set_courier_status, 
+    update_courier_activity
+)
 
 bot = Bot(TOKEN)
 dp = Dispatcher()
