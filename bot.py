@@ -153,6 +153,12 @@ async def set_lang(callback: CallbackQuery):
     ])
     await callback.message.edit_text(text, reply_markup=kb)
 
+async def send_localized_message(message: Message, key: str, **kwargs):
+    # Получаем язык пользователя из БД
+    lang = await get_user_lang(message.from_user.id)
+    text = get_text(key, lang)
+    await message.answer(text.format(**kwargs))
+
 async def main():
     await connect_db()
     await init_db()
