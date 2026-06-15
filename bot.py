@@ -84,6 +84,32 @@ async def accept_order(callback: CallbackQuery):
     await update_order_status(order_id, 'accepted', callback.from_user.id)
     await callback.message.edit_text("✅ Заказ принят!")
 
+# --- Переключение статуса курьера ---
+@dp.message(Command("online"))
+async def go_online(message: Message):
+    await set_courier_status(message.from_user.id, True)
+    await message.answer("✅ Вы онлайн и готовы принимать заказы!")
+
+@dp.message(Command("offline"))
+async def go_offline(message: Message):
+    await set_courier_status(message.from_user.id, False)
+    await message.answer("💤 Вы офлайн. Заказы больше не будут приходить.")
+
+# --- Система отзывов (после выполнения заказа) ---
+# После того как курьер нажал "Доставлено" и клиент получил заказ:
+async def ask_for_review(client_id, order_id, courier_id):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ 1", callback_data=f"rate_{order_id}_{courier_id}_1"),
+         InlineKeyboardButton(text="⭐⭐⭐⭐⭐ 5", callback_data=f"rate_{order_id}_{courier_id}_5")]
+    ])
+    await bot.send_message(client_id, "Оцените работу курьера:", reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("rate_"))
+async def process_review(callback: CallbackQuery):
+    _, order_id, courier_id, rating = callback.data.split("_")
+    await add_review(int(order_id), int(courier_id), int(rating), "Без комментария")
+    await callback.message.edit_text("Спасибо за ваш отзыв! 🙏")
+
 async def main():
     await connect_db()
     await init_db()
