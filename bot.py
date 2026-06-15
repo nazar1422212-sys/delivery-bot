@@ -137,6 +137,32 @@ async def process_delivery(message: Message, state: FSMContext):
 
 # ... (здесь импорты и все обработчики @dp.message ...)
 
+# Добавьте этот код в ваш bot.py
+@dp.callback_query(F.data.startswith("cancel_"))
+async def cancel_order(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    
+    # 1. Проверяем, был ли назначен курьер
+    courier_id = await get_order_courier(order_id)
+    
+    # 2. Отменяем в базе
+    await cancel_order_db(order_id)
+    
+    # 3. Сообщаем клиенту
+    await callback.message.edit_text("❌ Заказ был успешно отменен.")
+    
+    # 4. Если курьер был, уведомляем его вежливо
+    if courier_id:
+        try:
+            await bot.send_message(
+                courier_id, 
+                f"⚠️ Заказ №{order_id} был отменен клиентом. Извините за неудобства."
+            )
+        except Exception as e:
+            print(f"Не удалось отправить уведомление курьеру: {e}")
+
+    await callback.answer("Заказ отменен")
+
 async def main():
     await connect_db()
     await init_db()  # <-- ВОТ ЗДЕСЬ ОНО ДОЛЖНО БЫТЬ!
