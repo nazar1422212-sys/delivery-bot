@@ -228,6 +228,14 @@ async def show_history(message: Message):
     text += f"\n📊 **Итого заработано: {total_earned} лей**"
     await message.answer(text)
 
+# Пример в bot.py
+async def finish_order_logic(order_id, courier_id, price):
+    # 1. Меняем статус в базе
+    await update_order_status(order_id, 'finished')
+    
+    # 2. Добавляем в историю с ценой (рейтинг пока 0)
+    await add_review(order_id, courier_id, price, 0, "Заказ завершен")
+
 async def main():
     await connect_db()
     await init_db()
