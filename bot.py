@@ -184,21 +184,27 @@ async def start(message: Message):
     ])
     await message.answer(text, reply_markup=kb)
 
-# Добавьте эту функцию-помощник в bot.py
+# bot.py
+
+# Генерация ссылки для Google Maps
 def get_maps_link(p_lat, p_lon, d_lat, d_lon):
     return f"https://www.google.com/maps/dir/?api=1&origin={p_lat},{p_lon}&destination={d_lat},{d_lon}&travelmode=driving"
 
-# В функции process_delivery (где вы рассылаете заказы курьерам):
-# ...
-# Получаем данные заказа (вместо 5.0 нужно передать реальные координаты из data)
-link = get_maps_link(p_lat, p_lon, message.location.latitude, message.location.longitude)
+# Курьер отправляет свою геопозицию
+@dp.message(F.location)
+async def update_location(message: Message):
+    # Предполагаем, что курьер прислал геолокацию
+    await update_courier_location(message.from_user.id, message.location.latitude, message.location.longitude)
+    await message.answer("📍 Ваша локация обновлена в системе.")
 
+# При рассылке заказа курьерам (в функции process_delivery)
+# ...
+link = get_maps_link(p_lat, p_lon, message.location.latitude, message.location.longitude)
 kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")],
-    [InlineKeyboardButton(text="🗺 Открыть маршрут в Maps", url=link)] # Ссылка на карты
+    [InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order['id']}")],
+    [InlineKeyboardButton(text="🗺 Навигация", url=link)]
 ])
-for c in couriers:
-    await bot.send_message(c['tg_id'], f"📦 Новый заказ! Стоимость: {order['price']} лей.", reply_markup=kb)
+# Рассылаем только ближайшим (из get_nearest_couriers)
 
 async def main():
     await connect_db()
