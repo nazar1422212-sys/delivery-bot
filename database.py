@@ -48,8 +48,9 @@ async def get_verified_couriers():
     return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
 
 async def create_order(client_id, pickup, delivery, price, payment_method):
-    row = await fetch("INSERT INTO orders (client_id, pickup_address, delivery_address, price, payment_method) VALUES ($1, $2, $3, $4, $5) RETURNING id", client_id, pickup, delivery, price, payment_method)
-    return row[0]['id'] if row else None
+    query = "INSERT INTO orders (client_id, pickup_address, delivery_address, price, payment_method) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+    row = await fetch(query, client_id, pickup, delivery, price, payment_method)
+    return row[0][0]
 
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
