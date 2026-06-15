@@ -11,6 +11,7 @@ from database import connect_db, update_courier_verification, get_verified_couri
 from keep_alive import run_web
 from database import cancel_order_db
 from database import get_order_courier
+from geopy.distance import geodesic
 
 run_web()
 bot = Bot(TOKEN)
@@ -205,6 +206,22 @@ kb = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🗺 Навигация", url=link)]
 ])
 # Рассылаем только ближайшим (из get_nearest_couriers)
+
+
+@dp.callback_query(F.data.startswith("arrived_"))
+async def check_arrival(callback: CallbackQuery):
+    order_id = int(callback.data.split("_")[1])
+    # Получаем координаты клиента из БД (нужно добавить функцию получения координат заказа)
+    order_coords = await get_order_coords(order_id) 
+    courier_coords = await get_courier_coords(callback.from_user.id)
+    
+    distance = geodesic(order_coords, courier_coords).meters
+    
+    if distance <= 100:
+        await update_order_status(order_id, 'arrived')
+        await callback.message.edit_text("✅ Отлично! Вы прибыли к клиенту.")
+    else:
+        await callback.answer(f"❌ Вы еще далеко ({int(distance)} м)", show_alert=True)
 
 async def main():
     await connect_db()
