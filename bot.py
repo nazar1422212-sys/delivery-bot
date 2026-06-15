@@ -7,6 +7,13 @@ from aiogram.types import Message
 from keep_alive import run_web
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from database import get_verified_couriers
+
+async def notify_couriers(order_info):
+    couriers = await get_verified_couriers()
+    for courier in couriers:
+        courier_id = courier['tg_id']
+        await bot.send_message(courier_id, f"Новый заказ! Детали: {order_info}")
 
 class OrderForm(StatesGroup):
     pickup = State()
