@@ -15,7 +15,7 @@ from database import (
     cancel_order_db, get_order_courier, get_user_lang, set_user_lang,
     set_passport_photo, verify_courier, delete_inactive_couriers, 
     update_courier_activity, set_courier_status, get_waiting_orders,
-    set_order_waiting  # <--- Добавьте эту строку!
+    set_order_waiting, create_courier
 )
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
@@ -47,6 +47,11 @@ async def set_lang(callback: CallbackQuery):
 async def set_role(callback: CallbackQuery):
     role = callback.data.split("_")[1]
     await set_user_role(callback.from_user.id, role)
+    
+    # Create courier record if role is courier
+    if role == "courier":
+        await create_courier(callback.from_user.id)
+    
     await callback.message.answer(f"✅ Зарегистрированы как {role}")
 
 @dp.message(Command("order"))
@@ -79,18 +84,31 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     
     # 2. Создаем заказ в БД
     order_id = await create_order(callback.from_user.id, data['pickup'], data['delivery'], 50.0, method)
-    await set_order_waiting(order_id)
     
-    # 3. Сообщаем пользователю
-    await callback.message.edit_text(f"✅ Заказ №{order_id} создан и поставлен в очередь!")
+    if order_id:
+        await set_order_waiting(order_id)
+        
+        # 3. Сообщаем пользователю
+        await callback.message.edit_text(f"✅ Заказ №{order_id} создан и поставлен в очередь!")
+    else:
+        await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
     
     # 4. ОЧИЩАЕМ состояние FSM, чтобы бот вернулся в обычный режим
     await state.clear()
+
 @dp.message(F.photo)
 async def handle_passport(message: Message):
     photo_id = message.photo[-1].file_id
     await set_passport_photo(message.from_user.id, photo_id)
-    await bot.send_photo(ADMIN_ID, photo_id, caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}")]]))
+    await bot.send_photo(
+        ADMIN_ID, 
+        photo_id, 
+        caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", 
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{message.from_user.id}")
+        ]])
+    )
     await message.answer("✅ Паспорт получен. Ожидайте подтверждения.")
 
 @dp.callback_query(F.data.startswith("approve_"))
@@ -118,13 +136,16 @@ async def help_command(message: Message):
 
 async def check_queue():
     while True:
-        orders = await get_waiting_orders()
-        for order in orders:
-            couriers = await get_verified_couriers()
-            if couriers:
-                await bot.send_message(couriers[0]['tg_id'], f"🔔 Новый заказ №{order['id']}!")
-                await update_order_status(order['id'], 'pending')
-        await delete_inactive_couriers()
+        try:
+            orders = await get_waiting_orders()
+            for order in orders:
+                couriers = await get_verified_couriers()
+                if couriers:
+                    await bot.send_message(couriers[0]['tg_id'], f"🔔 Новый заказ №{order['id']}!")
+                    await update_order_status(order['id'], 'pending')
+            await delete_inactive_couriers()
+        except Exception as e:
+            print(f"Error in check_queue: {e}")
         await asyncio.sleep(60)
 
 async def main():
