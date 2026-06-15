@@ -104,5 +104,13 @@ async def handle_passport(message: Message):
                          ]))
     await message.answer("✅ Паспорт получен. Ожидайте подтверждения от администратора.")
 
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_courier(callback: CallbackQuery):
+    courier_id = callback.data.split("_")[1]
+    await verify_courier(int(courier_id))
+    
+    await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
+    await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! Теперь вы можете работать: /online")
+
 if __name__ == "__main__":
     asyncio.run(main())
