@@ -129,3 +129,9 @@ async def update_courier_verification(tg_id, is_verified: bool):
 async def update_courier_activity(tg_id):
     await execute("UPDATE couriers SET last_active = NOW() WHERE tg_id = $1", tg_id)
     await execute(query)
+
+# database.py
+
+async def cancel_order_db(order_id):
+    """Удаляет заказ из базы по его ID"""
+    await execute("DELETE FROM orders WHERE id = $1", order_id)
