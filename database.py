@@ -129,4 +129,12 @@ async def get_courier_history(courier_id):
     ORDER BY created_at DESC 
     LIMIT 10;
     """
+
+# database.py
+
+async def add_review(order_id, courier_id, price, rating, comment):
+    await execute(
+        "INSERT INTO order_history (order_id, courier_id, price, rating, comment) VALUES ($1, $2, $3, $4, $5)", 
+        order_id, courier_id, price, rating, comment
+    )
     return await fetch(query, courier_id)
