@@ -9,9 +9,25 @@ async def connect_db():
 
 async def init_db():
     query = """
-    CREATE TABLE IF NOT EXISTS users(tg_id BIGINT PRIMARY KEY, username TEXT, role TEXT, phone TEXT, created_at TIMESTAMP DEFAULT NOW());
-    CREATE TABLE IF NOT EXISTS couriers(tg_id BIGINT PRIMARY KEY, lat DOUBLE PRECISION, lon DOUBLE PRECISION, online BOOLEAN DEFAULT TRUE, rating DOUBLE PRECISION DEFAULT 5, passport_url TEXT, is_verified BOOLEAN DEFAULT FALSE);
-    CREATE TABLE IF NOT EXISTS orders(id SERIAL PRIMARY KEY, client_id BIGINT, courier_id BIGINT, pickup_lat DOUBLE PRECISION, pickup_lon DOUBLE PRECISION, delivery_lat DOUBLE PRECISION, delivery_lon DOUBLE PRECISION, distance DOUBLE PRECISION, price DOUBLE PRECISION, status TEXT, payment_status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS users(
+        tg_id BIGINT PRIMARY KEY, 
+        role TEXT, 
+        lang TEXT DEFAULT 'ru'
+    );
+    CREATE TABLE IF NOT EXISTS couriers(
+        tg_id BIGINT PRIMARY KEY, 
+        online BOOLEAN DEFAULT TRUE, 
+        is_verified BOOLEAN DEFAULT FALSE
+    );
+    CREATE TABLE IF NOT EXISTS orders(
+        id SERIAL PRIMARY KEY, 
+        client_id BIGINT, 
+        courier_id BIGINT, 
+        pickup_address TEXT, 
+        delivery_address TEXT, 
+        price DOUBLE PRECISION, 
+        status TEXT
+    );
     """
     async with pool.acquire() as conn:
         await conn.execute(query)
@@ -24,7 +40,7 @@ async def fetch(query, *args):
     async with pool.acquire() as conn:
         return await conn.fetch(query, *args)
 
-# --- ФУНКЦИИ, КОТОРЫЕ ИЩЕТ BOT.PY ---
+# --- Функции для работы ---
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
 
@@ -34,71 +50,22 @@ async def update_courier_verification(tg_id, status: bool):
 async def get_verified_couriers():
     return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
 
+async def create_order(client_id, pickup, delivery, price):
+    row = await fetch(
+        "INSERT INTO orders (client_id, pickup_address, delivery_address, price, status) VALUES ($1, $2, $3, $4, 'pending') RETURNING id",
+        client_id, pickup, delivery, price
+    )
+    return {'id': row[0][0], 'price': price}
+
 async def update_order_status(order_id, status, courier_id=None):
     if courier_id:
         await execute("UPDATE orders SET status = $1, courier_id = $2 WHERE id = $3", status, courier_id, order_id)
     else:
         await execute("UPDATE orders SET status = $1 WHERE id = $2", status, order_id)
 
-async def create_order(client_id, p_lat, p_lon, d_lat, d_lon, distance):
-    price = round(distance * 10.0, 2)
-    row = await fetch("INSERT INTO orders (client_id, pickup_lat, pickup_lon, delivery_lat, delivery_lon, distance, price, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') RETURNING id",
-                      client_id, p_lat, p_lon, d_lat, d_lon, distance, price)
-    return {'id': row[0][0], 'price': price}
-
-# Добавьте в database.py
 async def get_order_courier(order_id):
-    """Возвращает tg_id курьера для заказа"""
     row = await fetch("SELECT courier_id FROM orders WHERE id = $1", order_id)
     return row[0]['courier_id'] if row and row[0]['courier_id'] else None
 
 async def cancel_order_db(order_id):
     await execute("UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id)
-
-# В функции init_db внутри database.py обновите таблицу users:
-async def init_db():
-    query = """
-    CREATE TABLE IF NOT EXISTS users(
-        tg_id BIGINT PRIMARY KEY, 
-        role TEXT, 
-        lang TEXT DEFAULT 'ru'  -- Добавили колонку языка
-    );
-    ...
-    """
-# database.py
-async def update_courier_location(tg_id, lat, lon):
-    await execute("UPDATE couriers SET lat = $1, lon = $2 WHERE tg_id = $3", lat, lon, tg_id)
-
-async def get_nearest_couriers(p_lat, p_lon):
-    # SQL-запрос для поиска курьеров в радиусе (простая формула расстояния)
-    # 0.01 градуса примерно равно 1.1 км, 100 метров = 0.001
-    query = """
-    SELECT tg_id, 
-           (6371 * acos(cos(radians($1)) * cos(radians(lat)) * cos(radians(lon) - radians($2)) + sin(radians($1)) * sin(radians(lat)))) AS distance
-    FROM couriers 
-    WHERE is_verified = TRUE AND online = TRUE
-    ORDER BY distance ASC
-    LIMIT 5;
-    """
-
-    # database.py
-async def init_db():
-    query = """
-    CREATE TABLE IF NOT EXISTS users(tg_id BIGINT PRIMARY KEY, role TEXT);
-    CREATE TABLE IF NOT EXISTS orders(
-        id SERIAL PRIMARY KEY,
-        client_id BIGINT,
-        courier_id BIGINT,
-        pickup_address TEXT,     -- Текст вместо lat/lon
-        delivery_address TEXT,   -- Текст вместо lat/lon
-        price DOUBLE PRECISION,
-        status TEXT
-    );
-    """
-    await execute(query)
-
-async def create_order(client_id, pickup_address, delivery_address, price):
-    row = await fetch("INSERT INTO orders (client_id, pickup_address, delivery_address, price, status) VALUES ($1, $2, $3, $4, 'pending') RETURNING id",
-                      client_id, pickup_address, delivery_address, price)
-    return {'id': row[0][0]}
-    return await fetch(query, p_lat, p_lon)
