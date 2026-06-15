@@ -1,7 +1,6 @@
 import asyncpg
 from config import DATABASE_URL
-import asyncpg
-from config import DATABASE_URL
+
 
 async def connect_db():
     global pool
