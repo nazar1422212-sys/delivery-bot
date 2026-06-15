@@ -78,5 +78,16 @@ async def get_stats_data():
         AVG(rating) as avg_rating
     FROM order_history;
     """
+
+# database.py
+
+async def set_user_lang(tg_id, lang):
+    """Сохраняет выбор языка пользователя"""
+    await execute("UPDATE users SET lang = $1 WHERE tg_id = $2", lang, tg_id)
+
+async def get_user_lang(tg_id):
+    """Получает язык пользователя, по умолчанию 'ru'"""
+    row = await fetch("SELECT lang FROM users WHERE tg_id = $1", tg_id)
+    return row[0]['lang'] if row else 'ru'
     row = await fetch(query)
     return row[0] if row else None
