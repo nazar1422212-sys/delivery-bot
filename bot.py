@@ -141,19 +141,51 @@ async def check_queue():
     while True:
         orders = await get_waiting_orders()
         for order in orders:
-            # orders - это список словарей/рядов из базы
             couriers = await get_verified_couriers()
             if couriers:
-                # ВАЖНО: берем данные из объекта order
+                # Берем данные из order (они теперь там есть, если create_order записал их)
                 text = (f"🔔 **Новый заказ №{order['id']}**\n"
-                        f"📍 Откуда: {order['pickup_address']}\n"
-                        f"🏁 Куда: {order['delivery_address']}\n"
-                        f"💰 Цена: {order['price']} леев\n"
-                        f"🗺 [Открыть в Google Maps](https://www.google.com/maps/search/?api=1&query={order['delivery_address'].replace(' ', '+')})")
+                        f"📍 {order['pickup_address']}\n"
+                        f"🏁 {order['delivery_address']}\n"
+                        f"💰 Цена: {order['price']} лей\n"
+                        f"📏 Расстояние: {calculate_price(order['pickup_address'], order['delivery_address'])[1]} км")
                 
                 await bot.send_message(couriers[0]['tg_id'], text, parse_mode="Markdown")
                 await update_order_status(order['id'], 'pending')
         await asyncio.sleep(60)
+
+
+
+# Функция расчета стоимости
+def calculate_price(addr1, addr2):
+    geolocator = Nominatim(user_agent="delivery_bot")
+    try:
+        loc1 = geolocator.geocode(addr1)
+        loc2 = geolocator.geocode(addr2)
+        dist = geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
+        
+        # 50 лей база + 10 лей за каждый км
+        price = 50 + (dist * 10)
+        return round(price, 0), round(dist, 1)
+    except:
+        return 50.0, 0 # Если адрес не найден, возвращаем базу
+
+# В функции finalize_order теперь расчет цены:
+@dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
+async def finalize_order(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    method = callback.data.split("_")[1]
+    data = await state.get_data()
+    
+    # Считаем цену и расстояние
+    price, dist = calculate_price(data['pickup'], data['delivery'])
+    
+    # Сохраняем в БД с учетом рассчитанной цены
+    order_id = await create_order(callback.from_user.id, data['pickup'], data['delivery'], price, method)
+    await set_order_waiting(order_id)
+    
+    await callback.message.edit_text(f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.")
+    await state.clear()
 
 
 def get_distance(addr1, addr2):
