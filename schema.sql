@@ -46,3 +46,9 @@ CREATE TABLE IF NOT EXISTS ratings(
     stars INTEGER,
     created_at TIMESTAMP DEFAULT NOW()
 );
+-- Добавить в таблицу couriers
+ALTER TABLE couriers ADD COLUMN passport_url TEXT;
+ALTER TABLE couriers ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;
+
+-- Таблица для истории заказов уже частично есть, добавим поле для финальной стоимости и статуса оплаты
+ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'; -- 'paid', 'cash'
