@@ -74,3 +74,13 @@ async def process_photo(message: Message, state: FSMContext):
     my_fee = total_price * 0.05
     courier_gets = total_price - my_fee
     return total_price, my_fee, courier_gets
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+def get_courier_keyboard(lat, lon):
+    # Ссылка на Google Maps для навигации
+    map_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}"
+    builder = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Открыть маршрут", url=map_url)],
+        [InlineKeyboardButton(text="Я на месте", callback_data="arrived")]
+    ])
+    return builder
