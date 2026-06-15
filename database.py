@@ -40,3 +40,5 @@ async def handle_photo(message: Message, state: FSMContext):
     await bot.send_photo(ADMIN_ID, photo_id, caption=f"Курьер {message.from_user.id} прислал доки.", reply_markup=kb)
     await message.answer("Ваши документы отправлены на проверку.")
     await state.clear()
+    async def get_verified_couriers_full():
+    return await fetch("SELECT * FROM couriers WHERE is_verified = TRUE AND online = TRUE")
