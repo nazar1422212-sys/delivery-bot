@@ -1,26 +1,23 @@
 import asyncio
+import keep_alive
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import Command
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from translations import get_text
-import keep_alive
-from database import *
 from config import TOKEN, ADMIN_ID
-# bot.py
-
-# bot.py
-
-# bot.py
-
 from database import (
     connect_db, init_db, set_user_role, update_courier_verification, 
     get_verified_couriers, update_order_status, create_order, 
-    cancel_order_db, get_order_courier, get_user_lang
+    cancel_order_db, get_order_courier, get_user_lang, set_user_lang,
+    set_passport_photo, verify_courier, delete_inactive_couriers, 
+    update_courier_activity, set_courier_status, get_waiting_orders
 )
 
-bot = Bot(TOKEN)
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
 dp = Dispatcher()
 
 class OrderForm(StatesGroup):
@@ -28,7 +25,6 @@ class OrderForm(StatesGroup):
     delivery = State()
     payment_method = State()
 
-# --- Старт и Роли ---
 @dp.message(Command("start"))
 async def start(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -52,7 +48,6 @@ async def set_role(callback: CallbackQuery):
     await set_user_role(callback.from_user.id, role)
     await callback.message.answer(f"✅ Зарегистрированы как {role}")
 
-# --- Оформление заказа ---
 @dp.message(Command("order"))
 async def start_order(message: Message, state: FSMContext):
     await message.answer("Введите адрес, откуда забрать:")
@@ -81,94 +76,54 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     await set_order_waiting(order_id)
     await callback.message.edit_text(f"✅ Заказ №{order_id} создан и поставлен в очередь!")
     await state.clear()
-# bot.py
 
-# bot.py
+@dp.message(F.photo)
+async def handle_passport(message: Message):
+    photo_id = message.photo[-1].file_id
+    await set_passport_photo(message.from_user.id, photo_id)
+    await bot.send_photo(ADMIN_ID, photo_id, caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}")]]))
+    await message.answer("✅ Паспорт получен. Ожидайте подтверждения.")
+
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_courier(callback: CallbackQuery):
+    courier_id = callback.data.split("_")[1]
+    await verify_courier(int(courier_id))
+    await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
+    await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! /online")
+
+@dp.message(Command("online"))
+async def go_online(message: Message):
+    await set_courier_status(message.from_user.id, True)
+    await update_courier_activity(message.from_user.id)
+    await message.answer("✅ Вы онлайн!")
+
+@dp.message(Command("offline"))
+async def go_offline(message: Message):
+    await set_courier_status(message.from_user.id, False)
+    await update_courier_activity(message.from_user.id)
+    await message.answer("💤 Вы ушли с линии.")
+
+@dp.message(Command("help"))
+async def help_command(message: Message):
+    await message.answer("🆘 *Помощь:*\n📦 /order - Заказ\n🚚 /online - Онлайн\n💤 /offline - Офлайн\n💳 /setcard - Карта")
 
 async def check_queue():
     while True:
-        # 1. Проверяем очередь заказов (часто)
         orders = await get_waiting_orders()
         for order in orders:
             couriers = await get_verified_couriers()
             if couriers:
                 await bot.send_message(couriers[0]['tg_id'], f"🔔 Новый заказ №{order['id']}!")
                 await update_order_status(order['id'], 'pending')
-        
-        # 2. Очистка неактивных (редко, раз в 24 часа)
-        # Чтобы не писать сложный таймер, можно проверять время внутри цикла
         await delete_inactive_couriers()
-        
-        # Пауза 86400 секунд = 24 часа
-        await asyncio.sleep(86400)
+        await asyncio.sleep(60)
 
 async def main():
     await connect_db()
     await init_db()
-    keep_alive.run_web() # Запуск веб-сервера для Render
-    asyncio.create_task(check_queue()) # Обязательно для очереди заказов
+    keep_alive.run_web()
+    asyncio.create_task(check_queue())
     await dp.start_polling(bot)
-
-
-@dp.message(F.photo)
-async def handle_passport(message: Message):
-    # Проверяем, является ли пользователь курьером (можно добавить проверку в БД)
-    photo_id = message.photo[-1].file_id
-    await set_passport_photo(message.from_user.id, photo_id)
-    
-    # Отправляем вам (Админу)
-    await bot.send_photo(ADMIN_ID, photo_id, 
-                         caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", 
-                         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                             [InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}")]
-                         ]))
-    await message.answer("✅ Паспорт получен. Ожидайте подтверждения от администратора.")
-
-@dp.callback_query(F.data.startswith("approve_"))
-async def approve_courier(callback: CallbackQuery):
-    courier_id = callback.data.split("_")[1]
-    await verify_courier(int(courier_id))
-    
-    await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
-    await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! Теперь вы можете работать: /online")
-
-# bot.py
-
-# ... (ваш код выше) ...
-
-# Добавьте сюда обработчики команд для курьеров
-@dp.message(Command("online"))
-async def go_online(message: Message):
-    # Убедитесь, что функции set_courier_status и update_courier_activity импортированы из database
-    await set_courier_status(message.from_user.id, True)
-    await update_courier_activity(message.from_user.id) # Сброс счетчика удаления
-    await message.answer("✅ Вы онлайн! Теперь вы будете получать заказы.")
-
-@dp.message(Command("offline"))
-async def go_offline(message: Message):
-    await set_courier_status(message.from_user.id, False)
-    # Здесь можно тоже обновить активность, если хотите
-    await update_courier_activity(message.from_user.id) 
-    await message.answer("💤 Вы ушли с линии.")
-
-# ... (ваш остальной код, например функция main()) ...
-
-@dp.message(Command("help"))
-async def help_command(message: Message):
-    text = """
-🆘 **Помощь по боту:**
-
-📦 **Заказ доставки:** `/order`
-📜 **История:** `/history`
-
-🚚 **Для курьеров:**
-✅ Стать онлайн: `/online`
-💤 Уйти с линии: `/offline`
-💳 Привязать карту: `/setcard`
-
-*Чтобы начать принимать заказы, отправьте боту фото паспорта для проверки.*
-    """
-    await message.answer(text, parse_mode="Markdown")
 
 if __name__ == "__main__":
     asyncio.run(main())
