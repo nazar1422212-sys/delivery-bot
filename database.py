@@ -65,8 +65,19 @@ async def init_db():
     );
     ...
     """
-# Добавьте в database.py
-async def get_nearby_couriers(p_lat, p_lon):
-    # Запрос выбирает курьеров, у которых есть координаты
-    # (В идеале здесь формула расстояния, но для начала возьмем всех доступных)
-    return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
+# database.py
+async def update_courier_location(tg_id, lat, lon):
+    await execute("UPDATE couriers SET lat = $1, lon = $2 WHERE tg_id = $3", lat, lon, tg_id)
+
+async def get_nearest_couriers(p_lat, p_lon):
+    # SQL-запрос для поиска курьеров в радиусе (простая формула расстояния)
+    # 0.01 градуса примерно равно 1.1 км, 100 метров = 0.001
+    query = """
+    SELECT tg_id, 
+           (6371 * acos(cos(radians($1)) * cos(radians(lat)) * cos(radians(lon) - radians($2)) + sin(radians($1)) * sin(radians(lat)))) AS distance
+    FROM couriers 
+    WHERE is_verified = TRUE AND online = TRUE
+    ORDER BY distance ASC
+    LIMIT 5;
+    """
+    return await fetch(query, p_lat, p_lon)
