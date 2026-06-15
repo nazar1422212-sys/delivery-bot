@@ -135,3 +135,10 @@ async def update_courier_activity(tg_id):
 async def cancel_order_db(order_id):
     """Удаляет заказ из базы по его ID"""
     await execute("DELETE FROM orders WHERE id = $1", order_id)
+
+# database.py
+
+async def get_order_courier(order_id):
+    """Находит ID курьера, который взял заказ"""
+    query = "SELECT courier_id FROM orders WHERE id = $1"
+    return await fetch_one(query, order_id)
