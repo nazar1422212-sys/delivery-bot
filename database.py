@@ -32,6 +32,8 @@ async def init_db():
     """)
 
 # Функции ролей и статусов
+# database.py
+
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
 
