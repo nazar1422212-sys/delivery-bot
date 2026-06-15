@@ -4,6 +4,8 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from translations import get_text
+from database import get_user_lang
 
 # Импорт всех функций из database
 from database import (
@@ -158,6 +160,13 @@ async def send_localized_message(message: Message, key: str, **kwargs):
     lang = await get_user_lang(message.from_user.id)
     text = get_text(key, lang)
     await message.answer(text.format(**kwargs))
+
+# Универсальная функция для отправки сообщений на языке пользователя
+async def send_msg(message, key, reply_markup=None):
+    # Получаем язык пользователя из БД (по умолчанию 'ru', если не нашли)
+    lang = await get_user_lang(message.from_user.id)
+    text = get_text(key, lang)
+    await message.answer(text, reply_markup=reply_markup)
 
 async def main():
     await connect_db()
