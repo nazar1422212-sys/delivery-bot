@@ -54,3 +54,14 @@ async def get_order_courier(order_id):
 
 async def cancel_order_db(order_id):
     await execute("UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id)
+
+# В функции init_db внутри database.py обновите таблицу users:
+async def init_db():
+    query = """
+    CREATE TABLE IF NOT EXISTS users(
+        tg_id BIGINT PRIMARY KEY, 
+        role TEXT, 
+        lang TEXT DEFAULT 'ru'  -- Добавили колонку языка
+    );
+    ...
+    """
