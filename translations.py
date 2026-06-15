@@ -16,6 +16,8 @@ messages = {
         'cancel': "❌ Anulează"
     }
 }
+# Если нужно быстро добавить вариант 'md'
+messages['md'] = messages['ro']
 
 def get_text(key, lang):
     return messages.get(lang, messages['ru']).get(key, key)
