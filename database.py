@@ -85,6 +85,14 @@ async def set_user_lang(tg_id, lang):
     """Сохраняет выбор языка пользователя"""
     await execute("UPDATE users SET lang = $1 WHERE tg_id = $2", lang, tg_id)
 
+# database.py
+async def get_waiting_orders():
+    # Получаем все заказы, которые висят в ожидании
+    return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+
+async def set_order_waiting(order_id):
+    await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
+
 async def get_user_lang(tg_id):
     """Получает язык пользователя, по умолчанию 'ru'"""
     row = await fetch("SELECT lang FROM users WHERE tg_id = $1", tg_id)
