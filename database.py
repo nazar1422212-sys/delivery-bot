@@ -46,7 +46,11 @@ async def create_order(client_id, p_lat, p_lon, d_lat, d_lon, distance):
                       client_id, p_lat, p_lon, d_lat, d_lon, distance, price)
     return {'id': row[0][0], 'price': price}
 
-# Добавьте эту функцию в ваш файл database.py
+# Добавьте в database.py
+async def get_order_courier(order_id):
+    """Возвращает tg_id курьера для заказа"""
+    row = await fetch("SELECT courier_id FROM orders WHERE id = $1", order_id)
+    return row[0]['courier_id'] if row and row[0]['courier_id'] else None
+
 async def cancel_order_db(order_id):
-    """Обновляет статус заказа на cancelled"""
     await execute("UPDATE orders SET status = 'cancelled' WHERE id = $1", order_id)
