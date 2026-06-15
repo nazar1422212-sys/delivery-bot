@@ -8,10 +8,12 @@ from translations import get_text
 import keep_alive
 from database import *
 from config import TOKEN, ADMIN_ID
+# bot.py
+
 from database import (
-    # ... ваши другие функции ...
-    set_courier_status, 
-    update_courier_activity
+    connect_db, init_db, set_user_role, update_courier_verification, 
+    get_verified_couriers, update_order_status, create_order, 
+    cancel_order_db, get_order_courier
 )
 
 bot = Bot(TOKEN)
