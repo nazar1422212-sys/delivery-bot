@@ -70,17 +70,22 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     await set_order_waiting(order_id)
     await callback.message.edit_text(f"✅ Заказ №{order_id} создан и поставлен в очередь!")
     await state.clear()
+# bot.py
 
-# --- Фоновая задача очереди ---
 async def check_queue():
     while True:
+        # 1. Проверяем очередь заказов
         orders = await get_waiting_orders()
         for order in orders:
             couriers = await get_verified_couriers()
             if couriers:
                 await bot.send_message(couriers[0]['tg_id'], f"🔔 Новый заказ №{order['id']}!")
                 await update_order_status(order['id'], 'pending')
-        await asyncio.sleep(30)
+        
+        # 2. Раз в сутки (или при каждом цикле) проводим очистку
+        await delete_inactive_couriers()
+        
+        await asyncio.sleep(86400) # Пауза 24 часа (86400 секунд), чтобы не грузить базу
 
 async def main():
     await connect_db()
