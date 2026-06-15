@@ -80,4 +80,25 @@ async def get_nearest_couriers(p_lat, p_lon):
     ORDER BY distance ASC
     LIMIT 5;
     """
+
+    # database.py
+async def init_db():
+    query = """
+    CREATE TABLE IF NOT EXISTS users(tg_id BIGINT PRIMARY KEY, role TEXT);
+    CREATE TABLE IF NOT EXISTS orders(
+        id SERIAL PRIMARY KEY,
+        client_id BIGINT,
+        courier_id BIGINT,
+        pickup_address TEXT,     -- Текст вместо lat/lon
+        delivery_address TEXT,   -- Текст вместо lat/lon
+        price DOUBLE PRECISION,
+        status TEXT
+    );
+    """
+    await execute(query)
+
+async def create_order(client_id, pickup_address, delivery_address, price):
+    row = await fetch("INSERT INTO orders (client_id, pickup_address, delivery_address, price, status) VALUES ($1, $2, $3, $4, 'pending') RETURNING id",
+                      client_id, pickup_address, delivery_address, price)
+    return {'id': row[0][0]}
     return await fetch(query, p_lat, p_lon)
