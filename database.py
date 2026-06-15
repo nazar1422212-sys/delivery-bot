@@ -116,7 +116,7 @@ async def delete_inactive_couriers():
     """
     await execute(query)
 
+# database.py
 async def update_courier_activity(tg_id):
-    """Обновляет время активности курьера (вызывать при каждом /online или /offline)"""
     await execute("UPDATE couriers SET last_active = NOW() WHERE tg_id = $1", tg_id)
     await execute(query)
