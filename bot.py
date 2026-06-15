@@ -4,6 +4,7 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from geopy.distance import geodesic
 
 from config import TOKEN, ADMIN_ID
 from database import connect_db, execute, update_courier_verification
@@ -128,30 +129,34 @@ async def process_delivery(message: Message, state: FSMContext):
     # Рассылка курьерам (функция из предыдущих шагов)
     await send_order_to_couriers(order['id'], f"Точка А: {p_lat}, {p_lon}\nТочка Б: {d_lat}, {d_lon}\nЦена: {price} лей")
 
-from geopy.distance import geodesic
+ # Не забудьте добавить этот импорт в начало файла
 
+# 1. Проверка дистанции (100 метров)
 async def is_near_location(courier_lat, courier_lon, target_lat, target_lon):
-    # Расстояние в метрах
-    distance = geodesic((courier_lat, courier_lon), (target_lat, target_lon)).meters
-    return distance <= 100
+    return geodesic((courier_lat, courier_lon), (target_lon, target_lon)).meters <= 100
 
+# 2. Обработка нажатия "Принять заказ"
 @dp.callback_query(F.data.startswith("accept_"))
 async def accept_order(callback: CallbackQuery):
     order_id = int(callback.data.split("_")[1])
-    # ... логика обновления статуса в БД ...
+    # Тут можно вызвать функцию update_order_status(order_id, 'accepted', callback.from_user.id)
     
-    # Клавиатура для курьера
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"arrived_{order_id}")],
         [InlineKeyboardButton(text="💰 Оплата получена", callback_data=f"paid_{order_id}")]
     ])
-    await callback.message.edit_text("Заказ принят! Жмите 'Я на месте' при прибытии.", reply_markup=kb)
+    await callback.message.edit_text("Вы приняли заказ! Жмите 'Я на месте' при прибытии.", reply_markup=kb)
 
-# Обработка прибытия
+# 3. Обработка прибытия
 @dp.callback_query(F.data.startswith("arrived_"))
 async def courier_arrived(callback: CallbackQuery):
+    # Здесь нужно добавить логику проверки координат (через состояние или базу данных)
+    await callback.answer("Уведомление клиенту отправлено!")
+    # await bot.send_message(client_id, "Курьер прибыл на место!")
+
+# 4. Обработка завершения (Оплата получена)
+@dp.callback_query(F.data.startswith("paid_"))
+async def finish_order(callback: CallbackQuery):
     order_id = int(callback.data.split("_")[1])
-    # Здесь нужно получить координаты курьера (из БД или последнего сообщения)
-    # Если дистанция < 100м:
-    await bot.send_message(client_id, "Курьер прибыл на точку!")
-    await callback.answer("Уведомление отправлено клиенту!")
+    # await update_order_status(order_id, 'finished')
+    await callback.message.edit_text("Заказ успешно закрыт. Спасибо за работу!")
