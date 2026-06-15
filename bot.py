@@ -165,6 +165,25 @@ async def cancel_order(callback: CallbackQuery):
 
     await callback.answer("Заказ отменен")
 
+from translations import messages
+
+# Функция для получения текста
+def get_text(key, lang='ru'):
+    return messages.get(lang, messages['ru']).get(key, key)
+
+# Обработчик /start с выбором языка (или можно сделать команду /lang)
+@dp.message(Command("start"))
+async def start(message: Message):
+    # Допустим, мы сохраняем язык в FSM или БД
+    lang = 'ro' # Это можно получать из базы данных пользователя
+    text = get_text('welcome', lang)
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=get_text('client', lang), callback_data="role_client")],
+        [InlineKeyboardButton(text=get_text('courier', lang), callback_data="role_courier")]
+    ])
+    await message.answer(text, reply_markup=kb)
+
 async def main():
     await connect_db()
     await init_db()  # <-- ВОТ ЗДЕСЬ ОНО ДОЛЖНО БЫТЬ!
