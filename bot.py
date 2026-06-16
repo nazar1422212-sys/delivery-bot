@@ -11,8 +11,6 @@ from translations import get_text
 from config import TOKEN, ADMIN_ID
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
-from geopy.distance import geodesic
-
 
 from database import (
     connect_db, init_db, set_user_role, update_courier_verification, 
@@ -20,20 +18,8 @@ from database import (
     cancel_order_db, get_order_courier, get_user_lang, set_user_lang,
     set_passport_photo, verify_courier, delete_inactive_couriers, 
     update_courier_activity, set_courier_status, get_waiting_orders,
-    set_order_waiting, create_courier
+    set_order_waiting, create_courier, get_order_data, execute
 )
-
-@dp.callback_query(F.data.startswith("accept_"))
-async def accept_order(callback: CallbackQuery):
-    order_id = callback.data.split("_")[1]
-    # Обновляем статус заказа в БД на 'in_progress'
-    await update_order_status(order_id, 'in_progress', callback.from_user.id)
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"at_pickup_{order_id}")],
-        [InlineKeyboardButton(text="🏁 Завершить (Точка Б)", callback_data=f"finish_{order_id}")]
-    ])
-    await callback.message.edit_text(f"✅ Заказ №{order_id} принят! Двигайтесь к точке А.", reply_markup=kb)
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
 dp = Dispatcher()
@@ -42,6 +28,9 @@ class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
     payment_method = State()
+
+class FinishOrderForm(StatesGroup):
+    waiting_for_finish_location = State()
 
 @dp.message(Command("start"))
 async def start(message: Message):
@@ -140,6 +129,18 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     
     await state.clear()
 
+@dp.callback_query(F.data.startswith("accept_"))
+async def accept_order(callback: CallbackQuery):
+    order_id = callback.data.split("_")[1]
+    # Обновляем статус заказа в БД на 'in_progress'
+    await update_order_status(order_id, 'in_progress', callback.from_user.id)
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"at_pickup_{order_id}")],
+        [InlineKeyboardButton(text="🏁 Завершить (Точка Б)", callback_data=f"finish_{order_id}")]
+    ])
+    await callback.message.edit_text(f"✅ Заказ №{order_id} принят! Двигайтесь к точке А.", reply_markup=kb)
+
 @dp.message(F.photo)
 async def handle_passport(message: Message):
     photo_id = message.photo[-1].file_id
@@ -195,11 +196,6 @@ async def calculate_price(data):
     price = 50 + (dist * 10)
     return round(price, 0), round(dist, 1)
 
-def calculate_price_and_dist(coords1, coords2):
-    dist = geodesic(coords1, coords2).km
-    price = 50 + (dist * 10)
-    return round(price, 0), round(dist, 1)
-
 async def get_distance(addr1, addr2):
     """Get distance between two addresses using geocoding"""
     if not addr1 or not addr2:
@@ -244,20 +240,24 @@ async def check_queue():
         
         await asyncio.sleep(10) # Теперь проверка каждые 10 секунд
 
-
 @dp.callback_query(F.data.startswith("finish_"))
 async def finish_order_check(callback: CallbackQuery, state: FSMContext):
     order_id = int(callback.data.split("_")[1])
     # Просим курьера прислать локацию для проверки
     await callback.message.answer("📍 Пожалуйста, пришлите вашу текущую геопозицию, чтобы завершить заказ.")
     await state.update_data(finishing_order=order_id)
-    await state.set_state("waiting_for_finish_location")
+    await state.set_state(FinishOrderForm.waiting_for_finish_location)
 
-@dp.message(State("waiting_for_finish_location"), F.location)
+@dp.message(FinishOrderForm.waiting_for_finish_location, F.location)
 async def verify_finish_location(message: Message, state: FSMContext):
     data = await state.get_data()
     order_id = data['finishing_order']
     order = await get_order_data(order_id)
+    
+    if not order:
+        await message.answer("❌ Заказ не найден.")
+        await state.clear()
+        return
     
     # Расстояние между курьером и точкой Б
     courier_coords = (message.location.latitude, message.location.longitude)
