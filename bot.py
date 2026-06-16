@@ -77,10 +77,14 @@ async def process_pickup(message: Message, state: FSMContext):
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
+    # ПРОВЕРЯЕМ, ПРИШЛА ЛИ ЛОКАЦИЯ
     if message.location:
         await state.update_data(delivery_lat=message.location.latitude, delivery_lon=message.location.longitude)
     else:
+        # Если пришел текст
         await state.update_data(delivery=message.text)
+    
+    # ... переход к выбору оплаты ...
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), 
