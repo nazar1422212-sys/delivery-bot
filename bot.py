@@ -95,11 +95,15 @@ async def process_delivery(message: Message, state: FSMContext):
 
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    """Handle order finalization with price calculation"""
     await callback.answer()
-    
     method = callback.data.split("_")[1]
     data = await state.get_data()
+    
+    # ПРАВИЛЬНЫЙ ВЫЗОВ: передаем весь словарь data
+    # (Мы изменим calculate_price ниже, чтобы она принимала именно словарь)
+    price, dist = await calculate_price(data) 
+    
+    # ... остальной код (create_order и т.д.) ...
     
     # Validate required data
     if not data or ('pickup' not in data and 'pickup_lat' not in data):
