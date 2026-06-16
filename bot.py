@@ -208,21 +208,16 @@ async def go_offline(message: Message):
 @dp.message(Command("help"))
 async def help_command(message: Message):
     await message.answer("🆘 *Помощь:*\n📦 /order - Заказ\n🚚 /online - Онлайн\n💤 /offline - Офлайн\n💳 /setcard - Карта")
-
 async def calculate_price(data):
-    """Calculate price based on either coordinates or address strings"""
-    # If coordinates are available
-    if 'pickup_lat' in data and 'delivery_lat' in data:
-        try:
-            dist = geodesic(
-                (data['pickup_lat'], data['pickup_lon']), 
-                (data['delivery_lat'], data['delivery_lon'])
-            ).km
-        except Exception as e:
-            print(f"ERROR: Failed to calculate distance from coordinates: {e}")
-            dist = 5.0
+    """Единая функция расчета"""
+    # 1. Если есть координаты (lat/lon)
+    if data.get('pickup_lat') and data.get('delivery_lat'):
+        dist = geodesic(
+            (data['pickup_lat'], data['pickup_lon']), 
+            (data['delivery_lat'], data['delivery_lon'])
+        ).km
+    # 2. Если есть адреса строками
     else:
-        # Calculate using address strings
         dist = await get_distance(data.get('pickup', ''), data.get('delivery', ''))
     
     price = 50 + (dist * 10)
