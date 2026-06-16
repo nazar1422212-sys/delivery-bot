@@ -195,6 +195,11 @@ async def calculate_price(data):
     price = 50 + (dist * 10)
     return round(price, 0), round(dist, 1)
 
+def calculate_price_and_dist(coords1, coords2):
+    dist = geodesic(coords1, coords2).km
+    price = 50 + (dist * 10)
+    return round(price, 0), round(dist, 1)
+
 async def get_distance(addr1, addr2):
     """Get distance between two addresses using geocoding"""
     if not addr1 or not addr2:
