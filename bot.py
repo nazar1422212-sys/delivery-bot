@@ -26,9 +26,15 @@ def get_maps_link(address):
 
 @dp.message(Command("start"))
 async def start(message: Message):
-    lang = await db.get_user_lang(message.from_user.id)
-    await message.answer(get_text('welcome', lang))
-
+    # Создаем кнопки
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="Я Клиент", callback_data="role_client"),
+            InlineKeyboardButton(text="Я Курьер", callback_data="role_courier")
+        ]
+    ])
+    # Отправляем сообщение с кнопками
+    await message.answer("Добро пожаловать! Выберите роль:", reply_markup=kb)
 @dp.message(Command("order"))
 async def start_order(message: Message, state: FSMContext):
     lang = await db.get_user_lang(message.from_user.id)
