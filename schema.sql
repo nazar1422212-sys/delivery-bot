@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS states (
     payload TEXT
 );
 
--- 4. Таблица заказов (полная структура)
+-- 4. Таблица заказов
 CREATE TABLE IF NOT EXISTS orders (
     id SERIAL PRIMARY KEY,
     client_tg_id BIGINT,
