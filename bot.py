@@ -21,6 +21,18 @@ from database import (
     set_order_waiting, create_courier
 )
 
+@dp.callback_query(F.data.startswith("accept_"))
+async def accept_order(callback: CallbackQuery):
+    order_id = callback.data.split("_")[1]
+    # Обновляем статус заказа в БД на 'in_progress'
+    await update_order_status(order_id, 'in_progress', callback.from_user.id)
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"at_pickup_{order_id}")],
+        [InlineKeyboardButton(text="🏁 Завершить (Точка Б)", callback_data=f"finish_{order_id}")]
+    ])
+    await callback.message.edit_text(f"✅ Заказ №{order_id} принят! Двигайтесь к точке А.", reply_markup=kb)
+
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
 dp = Dispatcher()
 
