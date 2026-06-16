@@ -57,18 +57,16 @@ async def set_courier_status(tg_id, status: bool):
 async def get_verified_couriers():
     return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
 
-async def create_order(client_tg_id, pickup, delivery, price, method, 
-                       p_lat=None, p_lon=None, d_lat=None, d_lon=None, 
-                       client_phone=None):
+async def create_order(client_tg_id, pickup, delivery, price, method, p_lat, p_lon, d_lat, d_lon, phone):
     query = """
-        INSERT INTO orders (client_tg_id, pickup_address, delivery_address, 
-                           price, payment_method, pickup_lat, pickup_lon, 
-                           delivery_lat, delivery_lon, client_phone, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'waiting')
-        RETURNING id
+        INSERT INTO orders (client_tg_id, pickup_address, delivery_address, price, payment_method, 
+                            pickup_lat, pickup_lon, delivery_lat, delivery_lon, client_phone)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id;
     """
-    return await fetchval(query, client_tg_id, pickup, delivery, price, method, 
-                          p_lat, p_lon, d_lat, d_lon, client_phone)
+    # Предполагаем, что у вас есть доступ к объекту подключения 'conn'
+    row = await conn.fetchrow(query, client_tg_id, pickup, delivery, price, method, p_lat, p_lon, d_lat, d_lon, phone)
+    return row['id'] if row else None
 
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
