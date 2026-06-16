@@ -50,12 +50,18 @@ async def set_courier_status(tg_id, status: bool):
 async def get_verified_couriers():
     return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
 
-async def create_order(client_id, pickup, delivery, price, payment_method, pickup_lat=None, pickup_lon=None, delivery_lat=None, delivery_lon=None):
-    """Create order with optional coordinates"""
-    query = "INSERT INTO orders (client_id, pickup_address, delivery_address, pickup_lat, pickup_lon, delivery_lat, delivery_lon, price, payment_method) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
-    row = await fetch(query, client_id, pickup, delivery, pickup_lat, pickup_lon, delivery_lat, delivery_lon, price, payment_method)
-    return row[0]['id'] if row else None
-
+async def create_order(client_tg_id, pickup, delivery, price, method, 
+                       p_lat=None, p_lon=None, d_lat=None, d_lon=None, 
+                       client_phone=None):
+    query = """
+        INSERT INTO orders (client_tg_id, pickup_address, delivery_address, 
+                           price, payment_method, pickup_lat, pickup_lon, 
+                           delivery_lat, delivery_lon, client_phone, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'waiting')
+        RETURNING id
+    """
+    return await execute(query, client_tg_id, pickup, delivery, price, method, 
+                         p_lat, p_lon, d_lat, d_lon, client_phone)
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
 
