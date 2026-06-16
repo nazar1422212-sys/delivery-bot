@@ -114,30 +114,25 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     # Создание заказа с передачей телефона
   # В finalize_order:
 order_id = await create_order(
-    callback.from_user.id, # это ваш client_tg_id
-    data.get('pickup'),
-    data.get('delivery'),
-    price,
-    method,
-    data.get('pickup_lat'),
-    data.get('pickup_lon'),
-    data.get('delivery_lat'),
-    data.get('delivery_lon'),
-    data.get('phone') # телефон
-)
-        
-        if order_id:
-            await set_order_waiting(order_id)
-            await callback.message.edit_text(
-                f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей."
-            )
-        else:
-            await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
-            
-    except Exception as e:
-        print(f"ERROR: Failed to create order: {e}")
-        await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
-    
+        callback.from_user.id,
+        data.get('pickup'),
+        data.get('delivery'),
+        price,
+        method,
+        data.get('pickup_lat'),
+        data.get('pickup_lon'),
+        data.get('delivery_lat'),
+        data.get('delivery_lon'),
+        data.get('phone')
+    )
+
+    if order_id: # Убедитесь, что эта строка начинается строго под 'order_id'
+        await set_order_waiting(order_id)
+        await callback.message.edit_text(
+            f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей."
+        )
+    else:
+        await callback.message.edit_text("❌ Ошибка при создании заказа.")
     await state.clear()
 
 
