@@ -1,7 +1,7 @@
 import asyncio
 import keep_alive
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import Command
@@ -15,10 +15,9 @@ from geopy.geocoders import Nominatim
 from database import (
     connect_db, init_db, set_user_role, update_courier_verification, 
     get_verified_couriers, update_order_status, create_order, 
-    cancel_order_db, get_order_courier, get_user_lang, set_user_lang,
-    set_passport_photo, verify_courier, delete_inactive_couriers, 
-    update_courier_activity, set_courier_status, get_waiting_orders,
-    set_order_waiting, create_courier, get_order_data, execute
+    get_user_lang, set_user_lang, set_passport_photo, verify_courier, 
+    set_courier_status, get_waiting_orders, set_order_waiting, 
+    create_courier, get_order_data, execute
 )
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
@@ -27,12 +26,13 @@ dp = Dispatcher()
 class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
-    phone = State() # Новое состояние
+    phone = State()
     payment_method = State()
 
 class FinishOrderForm(StatesGroup):
     waiting_for_finish_location = State()
 
+# --- СТАРТ И РЕГИСТРАЦИЯ ---
 @dp.message(Command("start"))
 async def start(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -54,25 +54,22 @@ async def set_lang(callback: CallbackQuery):
 async def set_role(callback: CallbackQuery):
     role = callback.data.split("_")[1]
     await set_user_role(callback.from_user.id, role)
-    
-    # Create courier record if role is courier
     if role == "courier":
         await create_courier(callback.from_user.id)
-    
     await callback.message.answer(f"✅ Зарегистрированы как {role}")
 
+# --- ОФОРМЛЕНИЕ ЗАКАЗА ---
 @dp.message(Command("order"))
 async def start_order(message: Message, state: FSMContext):
     await message.answer("Введите адрес, откуда забрать:")
     await state.set_state(OrderForm.pickup)
+
 @dp.message(OrderForm.pickup)
 async def process_pickup(message: Message, state: FSMContext):
     if message.location:
-        # Убедитесь, что ключи совпадают с теми, что в calculate_price
         await state.update_data(pickup_lat=message.location.latitude, pickup_lon=message.location.longitude)
     else:
         await state.update_data(pickup=message.text)
-    # ...
     await state.set_state(OrderForm.delivery)
     await message.answer("📍 Введите адрес доставки (или отправьте геопозицию):")
 
@@ -83,294 +80,84 @@ async def process_delivery(message: Message, state: FSMContext):
     else:
         await state.update_data(delivery=message.text)
     
-    # Запрашиваем номер телефона (уровень отступа здесь 4 пробела)
-    await message.answer("📞 Введите ваш номер телефона:", 
-                         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True))
+    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True, one_time_keyboard=True)
+    await message.answer("📞 Введите ваш номер телефона или нажмите кнопку:", reply_markup=kb)
     await state.set_state(OrderForm.phone)
 
-    
 @dp.message(OrderForm.phone)
 async def process_phone(message: Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text
     await state.update_data(phone=phone)
-    # Далее переход к выбору оплаты
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), 
-         InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
+        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
     ])
     await message.answer("✅ Выберите способ оплаты:", reply_markup=kb)
     await state.set_state(OrderForm.payment_method)
-    phone = message.contact.phone_number if message.contact else message.text
-    await state.update_data(phone=phone)
-    
+
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    # ... (код получения data) ...
-# Начало функции finalize_order...
+    method = callback.data.split("_")[1]
     data = await state.get_data()
-    
-    # Расчет цены
     price, dist = await calculate_price(data)
     
-    # Создание заказа
     order_id = await create_order(
-        callback.from_user.id,
-        data.get('pickup', 'Coordinates provided'),
-        data.get('delivery', 'Coordinates provided'),
-        price,
-        method,
-        data.get('pickup_lat'),
-        data.get('pickup_lon'),
-        data.get('delivery_lat'),
-        data.get('delivery_lon'),
-        data.get('phone')
+        callback.from_user.id, data.get('pickup'), data.get('delivery'), 
+        price, method, data.get('pickup_lat'), data.get('pickup_lon'), 
+        data.get('delivery_lat'), data.get('delivery_lon'), data.get('phone')
     )
 
     if order_id:
         await set_order_waiting(order_id)
-        await callback.message.edit_text(
-            f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей."
-        )
+        await callback.message.edit_text(f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.")
     else:
-        await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
-    
+        await callback.message.edit_text("❌ Ошибка при создании заказа.")
     await state.clear()
 
+# --- КУРЬЕРСКИЕ ФУНКЦИИ ---
+async def check_queue():
+    while True:
+        orders = await get_waiting_orders()
+        for order in orders:
+            couriers = await get_verified_couriers()
+            if couriers:
+                text = (f"🔔 **Новый заказ №{order['id']}**\n📍 От: {order['pickup_address']}\n"
+                        f"🏁 До: {order['delivery_address']}\n📞 Тел: {order['client_phone']}\n"
+                        f"👤 <a href='tg://user?id={order['client_tg_id']}'>Написать клиенту</a>")
+                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]])
+                await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                await update_order_status(order['id'], 'pending')
+        await asyncio.sleep(10)
 
 @dp.callback_query(F.data.startswith("accept_"))
 async def accept_order(callback: CallbackQuery):
-    try:
-        order_id = callback.data.split("_")[1]
-        # Обновляем статус заказа в БД на 'in_progress'
-        await update_order_status(order_id, 'in_progress', callback.from_user.id)
-        
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"at_pickup_{order_id}")],
-            [InlineKeyboardButton(text="🏁 Завершить (Точка Б)", callback_data=f"finish_{order_id}")]
-        ])
-        await callback.message.edit_text(f"✅ Заказ №{order_id} принят! Двигайтесь к точке А.", reply_markup=kb)
-    except Exception as e:
-        print(f"ERROR: Failed to accept order: {e}")
-        await callback.answer("❌ Ошибка при принятии заказа", show_alert=True)
+    order_id = callback.data.split("_")[1]
+    await update_order_status(order_id, 'in_progress', callback.from_user.id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏁 Завершить", callback_data=f"finish_{order_id}")]])
+    await callback.message.edit_text(f"✅ Заказ №{order_id} принят!", reply_markup=kb)
 
-@dp.message(F.photo)
-async def handle_passport(message: Message):
-    try:
-        photo_id = message.photo[-1].file_id
-        await set_passport_photo(message.from_user.id, photo_id)
-        await bot.send_photo(
-            ADMIN_ID, 
-            photo_id, 
-            caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", 
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{message.from_user.id}")
-            ]])
-        )
-        await message.answer("✅ Паспорт получен. Ожидайте подтверждения.")
-    except Exception as e:
-        print(f"ERROR: Failed to handle passport: {e}")
-        await message.answer("❌ Ошибка при отправке паспорта")
-
-@dp.callback_query(F.data.startswith("approve_"))
-async def approve_courier(callback: CallbackQuery):
-    try:
-        courier_id = callback.data.split("_")[1]
-        await verify_courier(int(courier_id))
-        await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
-        await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! /online")
-    except Exception as e:
-        print(f"ERROR: Failed to approve courier: {e}")
-        await callback.answer("❌ Ошибка при одобрении курьера", show_alert=True)
-
-@dp.message(Command("online"))
-async def go_online(message: Message):
-    try:
-        await set_courier_status(message.from_user.id, True)
-        await message.answer("✅ Вы теперь онлайн и будете получать заказы!")
-    except Exception as e:
-        print(f"ERROR: Failed to set online status: {e}")
-        await message.answer("❌ Ошибка при установке статуса")
-
-@dp.message(Command("offline"))
-async def go_offline(message: Message):
-    try:
-        await set_courier_status(message.from_user.id, False)
-        await message.answer("💤 Вы ушли с линии. Заказы не будут приходить.")
-    except Exception as e:
-        print(f"ERROR: Failed to set offline status: {e}")
-        await message.answer("❌ Ошибка при установке статуса")
-
-@dp.message(Command("help"))
-async def help_command(message: Message):
-    await message.answer("🆘 *Помощь:*\n📦 /order - Заказ\n🚚 /online - Онлайн\n💤 /offline - Офлайн\n💳 /setcard - Карта")
+# --- УТИЛИТЫ ---
 async def calculate_price(data):
-    """Единая функция расчета"""
-    # 1. Если есть координаты (lat/lon)
-    if data.get('pickup_lat') and data.get('delivery_lat'):
-        dist = geodesic(
-            (data['pickup_lat'], data['pickup_lon']), 
-            (data['delivery_lat'], data['delivery_lon'])
-        ).km
-    # 2. Если есть адреса строками
-    else:
-        dist = await get_distance(data.get('pickup', ''), data.get('delivery', ''))
-    
-    price = 50 + (dist * 10)
-    return round(price, 0), round(dist, 1)
-
-async def get_distance(addr1, addr2):
-    """Get distance between two addresses using geocoding"""
-    if not addr1 or not addr2:
-        return 5.0
-    
-    geolocator = Nominatim(user_agent="delivery_bot_v1")
-    try:
-        loc1 = geolocator.geocode(addr1, language='ru')
-        loc2 = geolocator.geocode(addr2, language='ru')
-        
-        if not loc1 or not loc2:
-            print(f"DEBUG: Could not find coordinates for: {addr1} or {addr2}")
-            return 5.0
-        
-        dist = geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
-        return round(dist, 1)
-    except Exception as e:
-        print(f"ERROR: Geocoding failed: {e}")
-        return 5.0
-
-async def check_queue():
-    while True:
-        try:
-            # Получаем заказы, которые 'waiting' (без курьера)
-            orders = await get_waiting_orders()
-            for order in orders:
-                couriers = await get_verified_couriers()  # Только онлайн и верифицированные
-                if couriers:
-                    # Внутри функции check_queue в bot.py:
-# Внутри check_queue, когда формируете текст для курьера:
-text = (f"🔔 **Новый заказ №{order['id']}**\n"
-        f"📍 {order['pickup_address']}\n"
-        f"🏁 {order['delivery_address']}\n"
-        f"📞 Телефон: {order['client_phone']}\n"
-        f"👤 Клиент: <a href='tg://user?id={order['client_tg_id']}'>Написать в Telegram</a>")
-
-# И отправка с параметром parse_mode:
-await bot.send_message(courier_tg_id, text, parse_mode=ParseMode.HTML, reply_markup=kb)
-                    
-                    # Добавляем кнопки принятия заказа
-                    kb = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]
-                    ])
-                    
-                    await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb)
-                    # Меняем статус на 'pending', чтобы бот не слал этот заказ снова
-                    await update_order_status(order['id'], 'pending')
-        except Exception as e:
-            print(f"ERROR in check_queue: {e}")
-        
-        await asyncio.sleep(10)  # Проверка каждые 10 секунд
-
-@dp.callback_query(F.data.startswith("finish_"))
-async def finish_order_check(callback: CallbackQuery, state: FSMContext):
-    try:
-        order_id = int(callback.data.split("_")[1])
-        # Просим курьера прислать локацию для проверки
-        await callback.message.answer("📍 Пожалуйста, пришлите вашу текущую геопозицию, чтобы завершить заказ.")
-        await state.update_data(finishing_order=order_id)
-        await state.set_state(FinishOrderForm.waiting_for_finish_location)
-    except Exception as e:
-        print(f"ERROR: Failed to start finish order: {e}")
-        await callback.answer("❌ Ошибка при завершении заказа", show_alert=True)
-        # В finalize_order в bot.py:
-    try:
-        price, dist = calculate_price(data['pickup'], data['delivery'])
-    except Exception as e:
-        print(f"Ошибка расчета: {e}")
-        price, dist = 100.0, 0 # Безопасное значение при сбое
-
-@dp.message(FinishOrderForm.waiting_for_finish_location, F.location)
-async def verify_finish_location(message: Message, state: FSMContext):
-    try:
-        data = await state.get_data()
-        order_id = data.get('finishing_order')
-        
-        if not order_id:
-            await message.answer("❌ Ошибка: ID заказа не найден.")
-            await state.clear()
-            return
-            
-        order = await get_order_data(order_id)
-        
-        if not order:
-            await message.answer("❌ Заказ не найден.")
-            await state.clear()
-            return
-        
-        if not order.get('delivery_lat') or not order.get('delivery_lon'):
-            await message.answer("❌ Координаты доставки не найдены в заказе.")
-            await state.clear()
-            return
-        
-        # Расстояние между курьером и точкой Б
-        courier_coords = (message.location.latitude, message.location.longitude)
-        delivery_coords = (order['delivery_lat'], order['delivery_lon'])
-        
-        dist_meters = geodesic(courier_coords, delivery_coords).meters
-        
-        if dist_meters <= 100:
-            await update_order_status(order_id, 'completed')
-            await message.answer(f"🎉 Заказ №{order_id} успешно завершен! К оплате: {order['price']} лей.")
-        else:
-            await message.answer(f"❌ Вы слишком далеко ({int(dist_meters)} м). Нужно быть в радиусе 100 м.")
-    except Exception as e:
-        print(f"ERROR: Failed to verify finish location: {e}")
-        await message.answer("❌ Ошибка при завершении заказа")
-    finally:
-        await state.clear()
-
-@dp.message(Command("reset"))
-async def reset_orders(message: Message):
-    try:
-        if message.from_user.id != int(ADMIN_ID):
-            return await message.answer("❌ У вас нет прав для этой команды.")
-        
-        # Удаляем все заказы со статусом 'waiting' или 'pending'
-        await execute("DELETE FROM orders WHERE status IN ('waiting', 'pending');")
-        await message.answer("🧹 Все ожидающие заказы были удалены.")
-    except Exception as e:
-        print(f"ERROR: Failed to reset orders: {e}")
-        await message.answer("❌ Ошибка при удалении заказов")
-
-async def calculate_price(data):
-    """Рассчитывает цену, используя сначала координаты, если они есть."""
-    
-    lat1 = data.get('pickup_lat')
-    lon1 = data.get('pickup_lon')
-    lat2 = data.get('delivery_lat')
-    lon2 = data.get('delivery_lon')
-
-    # Если есть обе пары координат — считаем по ним (самый точный способ)
+    lat1, lon1, lat2, lon2 = data.get('pickup_lat'), data.get('pickup_lon'), data.get('delivery_lat'), data.get('delivery_lon')
     if all([lat1, lon1, lat2, lon2]):
         dist = geodesic((lat1, lon1), (lat2, lon2)).km
     else:
-        # Если координат нет, пробуем искать по тексту
         dist = await get_distance(data.get('pickup', ''), data.get('delivery', ''))
-    
-    # 50 лей база + 10 лей за км
-    price = 50 + (dist * 10)
-    return round(price, 0), round(dist, 1)
+    return round(50 + (dist * 10), 0), round(dist, 1)
+
+async def get_distance(addr1, addr2):
+    geolocator = Nominatim(user_agent="delivery_bot_v1")
+    try:
+        loc1 = geolocator.geocode(addr1)
+        loc2 = geolocator.geocode(addr2)
+        return round(geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km, 1) if loc1 and loc2 else 5.0
+    except: return 5.0
 
 async def main():
-    try:
-        await connect_db()
-        await init_db()
-        keep_alive.run_web()
-        asyncio.create_task(check_queue())
-        await dp.start_polling(bot)
-    except Exception as e:
-        print(f"CRITICAL ERROR in main: {e}")
-        raise
+    await connect_db()
+    await init_db()
+    keep_alive.run_web()
+    asyncio.create_task(check_queue())
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
