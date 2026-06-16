@@ -22,19 +22,46 @@ async def fetchval(query, *args):
 async def init_db():
     await execute("""
         CREATE TABLE IF NOT EXISTS users (tg_id BIGINT PRIMARY KEY, role TEXT, lang TEXT DEFAULT 'ru');
-        CREATE TABLE IF NOT EXISTS couriers (tg_id BIGINT PRIMARY KEY, online BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, card_number TEXT, passport_url TEXT, last_active TIMESTAMP DEFAULT NOW());
-        CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_tg_id BIGINT, pickup_address TEXT, delivery_address TEXT, price DOUBLE PRECISION, payment_method TEXT, client_phone TEXT, vehicle_type TEXT DEFAULT 'standard', status TEXT DEFAULT 'waiting', courier_id BIGINT, created_at TIMESTAMP DEFAULT NOW());
-        CREATE TABLE IF NOT EXISTS order_history (id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS couriers (tg_id BIGINT PRIMARY KEY, online BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE);
+        CREATE TABLE IF NOT EXISTS orders (
+            id SERIAL PRIMARY KEY, 
+            client_tg_id BIGINT, 
+            pickup_address TEXT, 
+            delivery_address TEXT, 
+            pickup_lat DOUBLE PRECISION, 
+            pickup_lon DOUBLE PRECISION, 
+            delivery_lat DOUBLE PRECISION, 
+            delivery_lon DOUBLE PRECISION, 
+            price DOUBLE PRECISION, 
+            payment_method TEXT, 
+            client_phone TEXT, 
+            vehicle_type TEXT DEFAULT 'standard', 
+            status TEXT DEFAULT 'waiting', 
+            courier_id BIGINT
+        );
     """)
-    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS vehicle_type TEXT DEFAULT 'standard';")
 
-async def create_order(client_tg_id, pickup, delivery, price, method, phone, vehicle_type):
+async def create_order(client_tg_id, pickup, delivery, price, method, phone, vehicle_type, p_lat=None, p_lon=None, d_lat=None, d_lon=None):
     query = """
-        INSERT INTO orders (client_tg_id, pickup_address, delivery_address, price, payment_method, client_phone, vehicle_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO orders (client_tg_id, pickup_address, delivery_address, price, payment_method, client_phone, vehicle_type, pickup_lat, pickup_lon, delivery_lat, delivery_lon)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
     """
-    return await fetchval(query, client_tg_id, pickup, delivery, price, method, phone, vehicle_type)
+    return await fetchval(query, client_tg_id, pickup, delivery, price, method, phone, vehicle_type, p_lat, p_lon, d_lat, d_lon)
+
+async def get_order_data(order_id):
+    row = await fetch("SELECT * FROM orders WHERE id = $1", int(order_id))
+    return dict(row[0]) if row else None
+
+async def get_my_active_order(courier_tg_id):
+    # Возвращает словарь с данными заказа
+    row = await fetch("SELECT * FROM orders WHERE courier_id = $1 AND status IN ('in_progress', 'at_pickup')", courier_tg_id)
+    return dict(row[0]) if row else None
+
+async def update_order_status_db(order_id, status):
+    await execute("UPDATE orders SET status = $1 WHERE id = $2", status, int(order_id))
+
+# Остальные функции (get_waiting_orders, get_verified_couriers и т.д.) остаются без изменений...
 
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
@@ -67,5 +94,4 @@ async def get_my_active_order(courier_tg_id):
     # Получает заказ, который курьер принял, но не завершил
     return await fetchval("SELECT * FROM orders WHERE courier_id = $1 AND status IN ('in_progress', 'at_pickup')", courier_tg_id)
 
-async def update_order_status_db(order_id, status):
-    await execute("UPDATE orders SET status = $1 WHERE id = $2", status, int(order_id))
+
