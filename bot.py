@@ -332,6 +332,22 @@ async def reset_orders(message: Message):
         print(f"ERROR: Failed to reset orders: {e}")
         await message.answer("❌ Ошибка при удалении заказов")
 
+def calculate_price(addr1, addr2):
+    # Увеличиваем таймаут до 10 секунд
+    geolocator = Nominatim(user_agent="delivery_bot_v1", timeout=10) 
+    try:
+        loc1 = geolocator.geocode(addr1, language='ru')
+        loc2 = geolocator.geocode(addr2, language='ru')
+        
+        if not loc1 or not loc2:
+            return 50.0, 0 # Базовая цена, если адрес не найден
+            
+        dist = geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
+        price = 50 + (dist * 10)
+        return round(price, 0), round(dist, 1)
+    except:
+        return 50.0, 0 # Если сервер лежит, просто даем цену по умолчанию
+
 async def main():
     try:
         await connect_db()
