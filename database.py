@@ -19,6 +19,12 @@ async def fetchval(query, *args):
     async with pool.acquire() as conn:
         return await conn.fetchval(query, *args)
 
+async def init_db():
+    """Initialize database - run schema if needed"""
+    async with pool.acquire() as conn:
+        # Check if tables exist, if not create them
+        await conn.execute(open('schema.sql').read())
+
 # --- ФУНКЦИИ ЗАКАЗОВ ---
 
 async def create_order(client_tg_id, pickup_addr, delivery_addr, price, method, phone, vehicle_type, p_lat=None, p_lon=None, d_lat=None, d_lon=None):
@@ -32,13 +38,17 @@ async def create_order(client_tg_id, pickup_addr, delivery_addr, price, method, 
 
 async def get_order_data(order_id):
     row = await fetch("SELECT * FROM orders WHERE id = $1", int(order_id))
-    return dict(row[0]) if row else None
+    if row:
+        return dict(row[0])
+    return None
 
 async def get_waiting_orders():
-    return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+    rows = await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+    return [dict(row) for row in rows]
 
 async def get_all_waiting_orders():
-    return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+    rows = await fetch("SELECT * FROM orders WHERE status = 'waiting'")
+    return [dict(row) for row in rows]
 
 async def update_order_status(order_id, status, courier_id=None):
     if courier_id:
@@ -48,10 +58,18 @@ async def update_order_status(order_id, status, courier_id=None):
 
 async def get_my_active_order(courier_tg_id):
     row = await fetch("SELECT * FROM orders WHERE courier_id = $1 AND status IN ('in_progress', 'at_pickup')", courier_tg_id)
-    return dict(row[0]) if row else None
+    if row:
+        return dict(row[0])
+    return None
+
+async def get_active_order_for_courier(courier_tg_id):
+    row = await fetch("SELECT * FROM orders WHERE courier_id = $1 AND status IN ('in_progress', 'at_pickup')", courier_tg_id)
+    if row:
+        return dict(row[0])
+    return None
 
 async def cancel_order_db(order_id):
-    await execute("DELETE FROM orders WHERE id = $1 AND status IN ('waiting', 'pending');", int(order_id))
+    await execute("DELETE FROM orders WHERE id = $1 AND status IN ('waiting', 'pending')", int(order_id))
 
 # --- ФУНКЦИИ ПОЛЬЗОВАТЕЛЕЙ И КУРЬЕРОВ ---
 
@@ -63,7 +81,8 @@ async def get_user_lang(tg_id):
     return row if row else 'ru'
 
 async def get_verified_couriers():
-    return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
+    rows = await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
+    return [dict(row) for row in rows]
 
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
