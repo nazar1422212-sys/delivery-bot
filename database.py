@@ -62,3 +62,10 @@ async def cancel_order_db(order_id):
 
 async def set_user_lang(tg_id, lang):
     await execute("UPDATE users SET lang = $1 WHERE tg_id = $2", lang, tg_id)
+
+async def get_my_active_order(courier_tg_id):
+    # Получает заказ, который курьер принял, но не завершил
+    return await fetchval("SELECT * FROM orders WHERE courier_id = $1 AND status IN ('in_progress', 'at_pickup')", courier_tg_id)
+
+async def update_order_status_db(order_id, status):
+    await execute("UPDATE orders SET status = $1 WHERE id = $2", status, int(order_id))
