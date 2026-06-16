@@ -111,17 +111,19 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     price, dist = await calculate_price(data)
     
     # Создание заказа с передачей телефона
-    order_id = await create_order(
-        callback.from_user.id, 
-        data.get('pickup', 'Coordinates provided'), 
-        data.get('delivery', 'Coordinates provided'), 
-        price, 
-        method,
-        data.get('pickup_lat'), data.get('pickup_lon'),
-        data.get('delivery_lat'), data.get('delivery_lon'),
-        data.get('phone') # <-- Телефон, который мы собрали ранее
-    )
-    # ... (остальной код) ...
+  # В finalize_order:
+order_id = await create_order(
+    callback.from_user.id, # это ваш client_tg_id
+    data.get('pickup'),
+    data.get('delivery'),
+    price,
+    method,
+    data.get('pickup_lat'),
+    data.get('pickup_lon'),
+    data.get('delivery_lat'),
+    data.get('delivery_lon'),
+    data.get('phone') # телефон
+)
         
         if order_id:
             await set_order_waiting(order_id)
