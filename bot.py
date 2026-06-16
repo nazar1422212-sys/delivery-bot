@@ -84,33 +84,55 @@ async def process_delivery(message: Message, state: FSMContext):
     await message.answer("📞 Введите ваш номер телефона или нажмите кнопку:", reply_markup=kb)
     await state.set_state(OrderForm.phone)
 
+# 1. ОБРАБОТКА ТЕЛЕФОНА
 @dp.message(OrderForm.phone)
 async def process_phone(message: Message, state: FSMContext):
+    # Получаем телефон
     phone = message.contact.phone_number if message.contact else message.text
+    
+    # Сохраняем в память
     await state.update_data(phone=phone)
+    
+    # Создаем клавиатуру выбора оплаты
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
+        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), 
+         InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
     ])
-    await message.answer("✅ Выберите способ оплаты:", reply_markup=kb)
+    
+    # ПЕРЕХОД В СОСТОЯНИЕ ОПЛАТЫ
     await state.set_state(OrderForm.payment_method)
+    
+    await message.answer("✅ Номер сохранен! Выберите способ оплаты:", reply_markup=kb)
 
+# 2. ОБРАБОТКА ОПЛАТЫ (ОБЯЗАТЕЛЬНО С DECORATOR)
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    method = callback.data.split("_")[1]
+    method = callback.data.split("_")[1] # "cash" или "card"
     data = await state.get_data()
+    
+    # Расчет цены
     price, dist = await calculate_price(data)
     
+    # Сохраняем данные в БД
     order_id = await create_order(
-        callback.from_user.id, data.get('pickup'), data.get('delivery'), 
-        price, method, data.get('pickup_lat'), data.get('pickup_lon'), 
-        data.get('delivery_lat'), data.get('delivery_lon'), data.get('phone')
+        client_tg_id=callback.from_user.id,
+        pickup=data.get('pickup', 'Geo'),
+        delivery=data.get('delivery', 'Geo'),
+        price=price,
+        method=method,
+        p_lat=data.get('pickup_lat'),
+        p_lon=data.get('pickup_lon'),
+        d_lat=data.get('delivery_lat'),
+        d_lon=data.get('delivery_lon'),
+        client_phone=data.get('phone')
     )
 
     if order_id:
         await set_order_waiting(order_id)
         await callback.message.edit_text(f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.")
     else:
-        await callback.message.edit_text("❌ Ошибка при создании заказа.")
+        await callback.message.edit_text("❌ Ошибка базы данных при создании заказа.")
+    
     await state.clear()
 
 # --- КУРЬЕРСКИЕ ФУНКЦИИ ---
