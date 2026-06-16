@@ -1,4 +1,6 @@
 import asyncio
+import random
+import urllib.parse
 import keep_alive
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
@@ -7,59 +9,27 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from translations import get_text
-from config import TOKEN, ADMIN_ID
-from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
-
+from config import TOKEN
 from database import (
-    connect_db, init_db, set_user_role, update_courier_verification, 
-    get_verified_couriers, update_order_status, create_order, 
-    get_user_lang, set_user_lang, set_passport_photo, verify_courier, 
-    set_courier_status, get_waiting_orders, set_order_waiting, 
-    create_courier, get_order_data, execute, cancel_order_db
+    connect_db, init_db, set_user_role, get_verified_couriers, update_order_status, 
+    create_order, create_courier, get_waiting_orders, set_order_waiting, cancel_order_db
 )
 
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
-    vehicle_type = State() # cargo или standard
+    vehicle_type = State()
     phone = State()
-    payment_method = State()
 
-class FinishOrderForm(StatesGroup):
-    waiting_for_finish_location = State()
+def get_google_maps_link(address):
+    if not address: return "#"
+    return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(address)}"
 
-# --- СТАРТ И РЕГИСТРАЦИЯ ---
-@dp.message(Command("start"))
-async def start(message: Message):
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru"), InlineKeyboardButton(text="🇷🇴 Română", callback_data="lang_ro")]
-    ])
-    await message.answer("Выберите язык / Alegeți limba:", reply_markup=kb)
+# --- ОСНОВНАЯ ЛОГИКА ---
 
-@dp.callback_query(F.data.startswith("lang_"))
-async def set_lang(callback: CallbackQuery):
-    lang = callback.data.split("_")[1]
-    await set_user_lang(callback.from_user.id, lang)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=get_text('client', lang), callback_data="role_client")],
-        [InlineKeyboardButton(text=get_text('courier', lang), callback_data="role_courier")]
-    ])
-    await callback.message.edit_text(get_text('welcome', lang), reply_markup=kb)
-
-@dp.callback_query(F.data.startswith("role_"))
-async def set_role(callback: CallbackQuery):
-    role = callback.data.split("_")[1]
-    await set_user_role(callback.from_user.id, role)
-    if role == "courier":
-        await create_courier(callback.from_user.id)
-    await callback.message.answer(f"✅ Зарегистрированы как {role}")
-
-# --- ОФОРМЛЕНИЕ ЗАКАЗА ---
 @dp.message(Command("order"))
 async def start_order(message: Message, state: FSMContext):
     await message.answer("Введите адрес, откуда забрать:")
@@ -67,144 +37,75 @@ async def start_order(message: Message, state: FSMContext):
 
 @dp.message(OrderForm.pickup)
 async def process_pickup(message: Message, state: FSMContext):
-    if message.location:
-        await state.update_data(pickup_lat=message.location.latitude, pickup_lon=message.location.longitude)
-    else:
-        await state.update_data(pickup=message.text)
+    await state.update_data(pickup=message.text)
     await state.set_state(OrderForm.delivery)
-    await message.answer("📍 Введите адрес доставки (или отправьте геопозицию):")
+    await message.answer("📍 Введите адрес доставки:")
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
-    if message.location:
-        await state.update_data(delivery_lat=message.location.latitude, delivery_lon=message.location.longitude)
-    else:
-        await state.update_data(delivery=message.text)
+    await state.update_data(delivery=message.text)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚗 Стандарт (30-100 лей)", callback_data="type_standard")],
+        [InlineKeyboardButton(text="🚚 Грузовой (200-600 лей)", callback_data="type_cargo")]
+    ])
+    await message.answer("Выберите тип авто:", reply_markup=kb)
+    await state.set_state(OrderForm.vehicle_type)
+
+@dp.callback_query(OrderForm.vehicle_type, F.data.startswith("type_"))
+async def process_vehicle(callback: CallbackQuery, state: FSMContext):
+    v_type = callback.data.split("_")[1]
+    price = random.randint(30, 100) if v_type == "standard" else random.randint(200, 600)
+    await state.update_data(vehicle_type=v_type, price=price)
     
     kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("📞 Введите ваш номер телефона или нажмите кнопку:", reply_markup=kb)
+    await callback.message.answer("📞 Введите ваш номер телефона или нажмите кнопку:", reply_markup=kb)
     await state.set_state(OrderForm.phone)
 
-# 1. ОБРАБОТКА ТЕЛЕФОНА
 @dp.message(OrderForm.phone)
 async def process_phone(message: Message, state: FSMContext):
-    # Получаем телефон
     phone = message.contact.phone_number if message.contact else message.text
+    data = await state.update_data(phone=phone)
     
-    # Сохраняем в память
-    await state.update_data(phone=phone)
-    
-    # Создаем клавиатуру выбора оплаты
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), 
-         InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
-    ])
-    
-    # ПЕРЕХОД В СОСТОЯНИЕ ОПЛАТЫ
-    await state.set_state(OrderForm.payment_method)
-    
-    await message.answer("✅ Номер сохранен! Выберите способ оплаты:", reply_markup=kb)
-
-# 2. ОБРАБОТКА ОПЛАТЫ (ОБЯЗАТЕЛЬНО С DECORATOR)
-@dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
-async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    method = callback.data.split("_")[1] # "cash" или "card"
-    data = await state.get_data()
-    
-    # Расчет цены
-    price, dist = await calculate_price(data)
-    
-    # Сохраняем данные в БД
     order_id = await create_order(
-        client_tg_id=callback.from_user.id,
-        pickup=data.get('pickup', 'Geo'),
-        delivery=data.get('delivery', 'Geo'),
-        price=price,
-        method=method,
-        p_lat=data.get('pickup_lat'),
-        p_lon=data.get('pickup_lon'),
-        d_lat=data.get('delivery_lat'),
-        d_lon=data.get('delivery_lon'),
-        client_phone=data.get('phone')
+        client_tg_id=message.from_user.id,
+        pickup=data['pickup'],
+        delivery=data['delivery'],
+        price=data['price'],
+        method="cash",
+        client_phone=phone
     )
 
     if order_id:
         await set_order_waiting(order_id)
-        # Добавляем кнопку отмены с ID заказа
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"cancel_{order_id}")]
-        ])
-        await callback.message.edit_text(
-            f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.",
-            reply_markup=kb
-        )
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отменить", callback_data=f"cancel_{order_id}")]])
+        await message.answer(f"✅ Заказ №{order_id} создан!\nЦена: {data['price']} лей.", reply_markup=kb)
     await state.clear()
 
-# --- КУРЬЕРСКИЕ ФУНКЦИИ ---
 async def check_queue():
     while True:
         orders = await get_waiting_orders()
         for order in orders:
             couriers = await get_verified_couriers()
             if couriers:
-                # Добавляем цену и расстояние в текст
-                # Используем .get() для безопасности, если каких-то полей вдруг нет
-                text = (f"🔔 **Новый заказ №{order['id']}**\n"
-                        f"📍 От: {order['pickup_address']}\n"
-                        f"🏁 До: {order['delivery_address']}\n"
-                        f"💰 Цена: {order.get('price', '0')} лей\n"
-                        f"📏 Расстояние: {order.get('distance', '0')} км\n"
-                        f"📞 Тел: {order['client_phone']}\n"
-                        f"👤 <a href='tg://user?id={order['client_tg_id']}'>Написать клиенту</a>")
+                p_link = get_google_maps_link(order['pickup_address'])
+                d_link = get_google_maps_link(order['delivery_address'])
                 
-                kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]
-                ])
+                text = (f"🔔 <b>Новый заказ №{order['id']}</b>\n"
+                        f"📍 <a href='{p_link}'>От: {order['pickup_address']}</a>\n"
+                        f"🏁 <a href='{d_link}'>До: {order['delivery_address']}</a>\n"
+                        f"💰 <b>Цена: {order.get('price', 0)} лей</b>\n"
+                        f"📞 Тел: {order['client_phone']}")
                 
-                await bot.send_message(
-                    couriers[0]['tg_id'], 
-                    text, 
-                    reply_markup=kb, 
-                    parse_mode=ParseMode.HTML
-                )
+                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order['id']}")]])
+                await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb)
                 await update_order_status(order['id'], 'pending')
         await asyncio.sleep(10)
 
-@dp.callback_query(F.data.startswith("accept_"))
-async def accept_order(callback: CallbackQuery):
-    order_id = callback.data.split("_")[1]
-    await update_order_status(order_id, 'in_progress', callback.from_user.id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🏁 Завершить", callback_data=f"finish_{order_id}")]])
-    await callback.message.edit_text(f"✅ Заказ №{order_id} принят!", reply_markup=kb)
-
-# --- УТИЛИТЫ ---
-async def calculate_price(data):
-    lat1, lon1, lat2, lon2 = data.get('pickup_lat'), data.get('pickup_lon'), data.get('delivery_lat'), data.get('delivery_lon')
-    if all([lat1, lon1, lat2, lon2]):
-        dist = geodesic((lat1, lon1), (lat2, lon2)).km
-    else:
-        dist = await get_distance(data.get('pickup', ''), data.get('delivery', ''))
-    return round(50 + (dist * 10), 0), round(dist, 1)
-
-async def get_distance(addr1, addr2):
-    geolocator = Nominatim(user_agent="delivery_bot_v1")
-    try:
-        loc1 = geolocator.geocode(addr1)
-        loc2 = geolocator.geocode(addr2)
-        return round(geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km, 1) if loc1 and loc2 else 5.0
-    except Exception:
-        return 5.0
-
 @dp.callback_query(F.data.startswith("cancel_"))
-async def cancel_order_handler(callback: CallbackQuery):
+async def cancel_handler(callback: CallbackQuery):
     order_id = callback.data.split("_")[1]
-    
-    # Вызываем функцию удаления из вашей database.py
-    # Убедитесь, что эта функция у вас есть (или используйте execute)
     await cancel_order_db(order_id)
-    
-    await callback.message.edit_text(f"🚫 Заказ №{order_id} успешно отменен.")
-    await callback.answer("Заказ отменен")
+    await callback.message.edit_text("🚫 Заказ отменен.")
 
 async def main():
     await connect_db()
