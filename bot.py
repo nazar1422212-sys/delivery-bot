@@ -120,11 +120,26 @@ async def check_queue():
         for order in orders:
             couriers = await get_verified_couriers()
             if couriers:
-                text = (f"🔔 **Новый заказ №{order['id']}**\n📍 От: {order['pickup_address']}\n"
-                        f"🏁 До: {order['delivery_address']}\n📞 Тел: {order['client_phone']}\n"
+                # Добавляем цену и расстояние в текст
+                # Используем .get() для безопасности, если каких-то полей вдруг нет
+                text = (f"🔔 **Новый заказ №{order['id']}**\n"
+                        f"📍 От: {order['pickup_address']}\n"
+                        f"🏁 До: {order['delivery_address']}\n"
+                        f"💰 Цена: {order.get('price', '0')} лей\n"
+                        f"📏 Расстояние: {order.get('distance', '0')} км\n"
+                        f"📞 Тел: {order['client_phone']}\n"
                         f"👤 <a href='tg://user?id={order['client_tg_id']}'>Написать клиенту</a>")
-                kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]])
-                await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb, parse_mode=ParseMode.HTML)
+                
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]
+                ])
+                
+                await bot.send_message(
+                    couriers[0]['tg_id'], 
+                    text, 
+                    reply_markup=kb, 
+                    parse_mode=ParseMode.HTML
+                )
                 await update_order_status(order['id'], 'pending')
         await asyncio.sleep(10)
 
