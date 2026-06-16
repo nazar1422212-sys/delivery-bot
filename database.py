@@ -98,3 +98,8 @@ async def cancel_order_db(order_id):
 async def get_order_courier(order_id):
     row = await fetch("SELECT courier_id FROM orders WHERE id = $1", order_id)
     return row[0]['courier_id'] if row else None
+
+# В database.py добавьте функцию получения данных заказа
+async def get_order_data(order_id):
+    row = await fetch("SELECT * FROM orders WHERE id = $1", order_id)
+    return row[0] if row else None
