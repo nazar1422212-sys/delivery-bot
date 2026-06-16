@@ -17,7 +17,7 @@ from database import (
     get_verified_couriers, update_order_status, create_order, 
     get_user_lang, set_user_lang, set_passport_photo, verify_courier, 
     set_courier_status, get_waiting_orders, set_order_waiting, 
-    create_courier, get_order_data, execute
+    create_courier, get_order_data, execute, cancel_order_db
 )
 
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
@@ -127,7 +127,7 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
         client_phone=data.get('phone')
     )
 
-if order_id:
+    if order_id:
         await set_order_waiting(order_id)
         # Добавляем кнопку отмены с ID заказа
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -191,7 +191,8 @@ async def get_distance(addr1, addr2):
         loc1 = geolocator.geocode(addr1)
         loc2 = geolocator.geocode(addr2)
         return round(geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km, 1) if loc1 and loc2 else 5.0
-    except: return 5.0
+    except Exception:
+        return 5.0
 
 @dp.callback_query(F.data.startswith("cancel_"))
 async def cancel_order_handler(callback: CallbackQuery):
