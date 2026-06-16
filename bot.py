@@ -166,6 +166,15 @@ async def client_ok(callback: CallbackQuery):
     await callback.answer("Спасибо! Курьер продолжает работу.")
     await callback.message.edit_text("✅ Прибытие подтверждено.")
 
+# 1. Получение языка пользователя из базы данных
+lang = await db.get_user_lang(message.from_user.id)
+
+# 2. Пример простого вывода
+await message.answer(get_text('welcome', lang))
+
+# 3. Пример вывода с переменными (ID заказа и цена)
+await message.answer(get_text('order_created', lang, id=order_id, price=price_value))
+
 
 async def main():
     await db.connect_db()
