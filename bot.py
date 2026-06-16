@@ -251,11 +251,17 @@ async def check_queue():
             for order in orders:
                 couriers = await get_verified_couriers()  # Только онлайн и верифицированные
                 if couriers:
-                    # Отправляем заказ первому свободному курьеру
-                    text = (f"🔔 **Новый заказ №{order['id']}**\n"
-                            f"📍 {order['pickup_address']}\n"
-                            f"🏁 {order['delivery_address']}\n"
-                            f"💰 Цена: {order['price']} лей")
+                    # Внутри функции check_queue в bot.py:
+text = (f"🔔 **Новый заказ №{order['id']}**\n"
+        f"📍 Откуда: {order['pickup_address']}\n"
+        f"🏁 Куда: {order['delivery_address']}\n"
+        f"💰 Цена: {order['price']} лей\n\n"
+        f"👤 Клиент: <a href='tg://user?id={order['client_tg_id']}'>Написать в Telegram</a>\n"
+        f"📞 Телефон: {order['client_phone']}")
+
+# Важно: добавьте parse_mode=ParseMode.HTML в send_message, 
+# так как мы используем тег <a> для ссылки на Telegram
+await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb, parse_mode=ParseMode.HTML)
                     
                     # Добавляем кнопки принятия заказа
                     kb = InlineKeyboardMarkup(inline_keyboard=[
