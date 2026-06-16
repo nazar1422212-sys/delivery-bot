@@ -68,12 +68,12 @@ async def start_order(message: Message, state: FSMContext):
 @dp.message(OrderForm.pickup)
 async def process_pickup(message: Message, state: FSMContext):
     if message.location:
+        # ВАЖНО: сохраняем именно эти ключи
         await state.update_data(pickup_lat=message.location.latitude, pickup_lon=message.location.longitude)
     else:
         await state.update_data(pickup=message.text)
-    
-    await message.answer("📍 Введите адрес доставки (или отправьте геопозицию):")
     await state.set_state(OrderForm.delivery)
+    await message.answer("📍 Введите адрес доставки (или отправьте геопозицию):")
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
