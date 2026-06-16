@@ -15,6 +15,11 @@ async def fetch(query, *args):
     async with pool.acquire() as conn:
         return await conn.fetch(query, *args)
 
+async def fetchval(query, *args):
+    """Fetch a single scalar value - used for RETURNING queries"""
+    async with pool.acquire() as conn:
+        return await conn.fetchval(query, *args)
+
 async def init_db():
     # Создаем таблицы, если их нет
     await execute("""
@@ -62,8 +67,9 @@ async def create_order(client_tg_id, pickup, delivery, price, method,
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'waiting')
         RETURNING id
     """
-    return await execute(query, client_tg_id, pickup, delivery, price, method, 
-                         p_lat, p_lon, d_lat, d_lon, client_phone)
+    return await fetchval(query, client_tg_id, pickup, delivery, price, method, 
+                          p_lat, p_lon, d_lat, d_lon, client_phone)
+
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
 
