@@ -193,6 +193,17 @@ async def get_distance(addr1, addr2):
         return round(geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km, 1) if loc1 and loc2 else 5.0
     except: return 5.0
 
+@dp.callback_query(F.data.startswith("cancel_"))
+async def cancel_order_handler(callback: CallbackQuery):
+    order_id = callback.data.split("_")[1]
+    
+    # Вызываем функцию удаления из вашей database.py
+    # Убедитесь, что эта функция у вас есть (или используйте execute)
+    await cancel_order_db(order_id)
+    
+    await callback.message.edit_text(f"🚫 Заказ №{order_id} успешно отменен.")
+    await callback.answer("Заказ отменен")
+
 async def main():
     await connect_db()
     await init_db()
