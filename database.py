@@ -111,7 +111,8 @@ async def update_courier_activity(tg_id):
     await execute("UPDATE couriers SET last_active = NOW() WHERE tg_id = $1", tg_id)
 
 async def cancel_order_db(order_id):
-    await execute("DELETE FROM orders WHERE id = $1", order_id)
+    query = "DELETE FROM orders WHERE id = $1 AND status IN ('waiting', 'pending');"
+    await execute(query, int(order_id))
 
 async def get_order_courier(order_id):
     row = await fetch("SELECT courier_id FROM orders WHERE id = $1", order_id)
