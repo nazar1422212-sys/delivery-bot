@@ -106,17 +106,17 @@ async def process_phone(message: Message, state: FSMContext):
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
     # ... (код получения data) ...
+# Начало функции finalize_order...
     data = await state.get_data()
     
     # Расчет цены
     price, dist = await calculate_price(data)
     
-    # Создание заказа с передачей телефона
-  # В finalize_order:
-order_id = await create_order(
+    # Создание заказа
+    order_id = await create_order(
         callback.from_user.id,
-        data.get('pickup'),
-        data.get('delivery'),
+        data.get('pickup', 'Coordinates provided'),
+        data.get('delivery', 'Coordinates provided'),
         price,
         method,
         data.get('pickup_lat'),
@@ -126,13 +126,14 @@ order_id = await create_order(
         data.get('phone')
     )
 
-    if order_id: # Убедитесь, что эта строка начинается строго под 'order_id'
+    if order_id:
         await set_order_waiting(order_id)
         await callback.message.edit_text(
             f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей."
         )
     else:
-        await callback.message.edit_text("❌ Ошибка при создании заказа.")
+        await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
+    
     await state.clear()
 
 
