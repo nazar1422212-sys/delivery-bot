@@ -36,7 +36,9 @@ async def init_db():
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending';")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_id BIGINT;")
-
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS client_phone TEXT;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS client_tg_id BIGINT;")
+   
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
 
