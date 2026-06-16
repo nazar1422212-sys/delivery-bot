@@ -83,11 +83,10 @@ async def process_delivery(message: Message, state: FSMContext):
     else:
         await state.update_data(delivery=message.text)
     
-    # Запрашиваем номер телефона
-    await message.answer("📞 Пожалуйста, введите ваш номер телефона или нажмите кнопку ниже:", 
+    # Запрашиваем номер телефона (уровень отступа здесь 4 пробела)
+    await message.answer("📞 Введите ваш номер телефона:", 
                          reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True))
     await state.set_state(OrderForm.phone)
-    @dp.message(OrderForm.phone)
 
     
 @dp.message(OrderForm.phone)
@@ -101,6 +100,8 @@ async def process_phone(message: Message, state: FSMContext):
     ])
     await message.answer("✅ Выберите способ оплаты:", reply_markup=kb)
     await state.set_state(OrderForm.payment_method)
+    phone = message.contact.phone_number if message.contact else message.text
+    await state.update_data(phone=phone)
     
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
