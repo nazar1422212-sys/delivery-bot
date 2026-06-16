@@ -26,6 +26,7 @@ dp = Dispatcher()
 class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
+    vehicle_type = State() # cargo или standard
     phone = State()
     payment_method = State()
 
