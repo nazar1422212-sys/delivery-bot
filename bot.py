@@ -99,6 +99,10 @@ async def cancel_handler(callback: CallbackQuery):
     await db.cancel_order_db(callback.data.split("_")[1])
     await callback.message.edit_text("🚫 Заказ отменен.")
 
+# Пример вызова
+lang = await get_user_lang(message.from_user.id) # или 'ru' по умолчанию
+await message.answer(get_text('order_created', lang, id=order_id, price=data['price']))
+
 async def main():
     await db.connect_db()
     await db.init_db()
