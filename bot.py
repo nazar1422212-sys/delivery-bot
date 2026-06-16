@@ -27,6 +27,7 @@ dp = Dispatcher()
 class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
+    phone = State() # <-- Добавляем стейт для телефона
     payment_method = State()
 
 class FinishOrderForm(StatesGroup):
@@ -77,12 +78,15 @@ async def process_pickup(message: Message, state: FSMContext):
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
-    # ПРОВЕРЯЕМ, ПРИШЛА ЛИ ЛОКАЦИЯ
-    if message.location:
-        await state.update_data(delivery_lat=message.location.latitude, delivery_lon=message.location.longitude)
-    else:
-        # Если пришел текст
-        await state.update_data(delivery=message.text)
+    # ... ваш код сохранения адреса ...
+    await message.answer("📞 Пожалуйста, пришлите ваш номер телефона (или нажмите кнопку 'Поделиться контактом'):", 
+                         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True))
+    await state.set_state(OrderForm.phone)
+
+    @dp.message(OrderForm.phone)
+async def process_phone(message: Message, state: FSMContext):
+    phone = message.contact.phone_number if message.contact else message.text
+    await state.update_data(phone=phone)
     
     # ... переход к выбору оплаты ...
     
