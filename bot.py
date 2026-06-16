@@ -65,14 +65,14 @@ async def set_role(callback: CallbackQuery):
 async def start_order(message: Message, state: FSMContext):
     await message.answer("Введите адрес, откуда забрать:")
     await state.set_state(OrderForm.pickup)
-
 @dp.message(OrderForm.pickup)
 async def process_pickup(message: Message, state: FSMContext):
     if message.location:
-        # ВАЖНО: сохраняем именно эти ключи
+        # Убедитесь, что ключи совпадают с теми, что в calculate_price
         await state.update_data(pickup_lat=message.location.latitude, pickup_lon=message.location.longitude)
     else:
         await state.update_data(pickup=message.text)
+    # ...
     await state.set_state(OrderForm.delivery)
     await message.answer("📍 Введите адрес доставки (или отправьте геопозицию):")
 
