@@ -47,7 +47,8 @@ async def fetchval(query, *args):
 
 async def init_db():
     """Initialize database - run schema if needed"""
-    try:
+
+try:
         await _ensure_pool()
         # Use async file reading
         async with aiofiles.open('schema.sql', mode='r') as f:
@@ -66,7 +67,7 @@ async def init_db():
 # --- ORDER FUNCTIONS ---
 
 async def create_order(client_tg_id, pickup_addr, delivery_addr, price, method, phone, vehicle_type, p_lat=None, p_lon=None, d_lat=None, d_lon=None):
-    """Create a new order"""
+"""Create a new order"""
     try:
         query = """
             INSERT INTO orders (client_tg_id, pickup_address, delivery_address, price, payment_method, 
