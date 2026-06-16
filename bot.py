@@ -99,22 +99,16 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
     method = callback.data.split("_")[1]
     data = await state.get_data()
     
-    # ПРАВИЛЬНЫЙ ВЫЗОВ: передаем весь словарь data
-    # (Мы изменим calculate_price ниже, чтобы она принимала именно словарь)
-    price, dist = await calculate_price(data) 
-    
-    # ... остальной код (create_order и т.д.) ...
-    
-    # Validate required data
+    # 1. ПРОВЕРКА ДАННЫХ (сначала проверяем, есть ли что считать)
     if not data or ('pickup' not in data and 'pickup_lat' not in data):
         await callback.message.edit_text("❌ Ошибка: данные заказа не найдены. Начните заново /order")
         await state.clear()
         return
     
-    # Calculate price based on available data
+    # 2. РАСЧЕТ ЦЕНЫ (вызываем только один раз)
     price, dist = await calculate_price(data)
     
-    # Create order in database
+    # 3. СОЗДАНИЕ ЗАКАЗА
     try:
         order_id = await create_order(
             callback.from_user.id, 
@@ -135,11 +129,13 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
             )
         else:
             await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
+            
     except Exception as e:
         print(f"ERROR: Failed to create order: {e}")
         await callback.message.edit_text("❌ Ошибка при создании заказа. Попробуйте позже.")
     
     await state.clear()
+
 
 @dp.callback_query(F.data.startswith("accept_"))
 async def accept_order(callback: CallbackQuery):
