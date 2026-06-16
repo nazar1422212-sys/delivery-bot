@@ -78,25 +78,30 @@ async def process_pickup(message: Message, state: FSMContext):
 
 @dp.message(OrderForm.delivery)
 async def process_delivery(message: Message, state: FSMContext):
-    # ... ваш код сохранения адреса ...
-    await message.answer("📞 Пожалуйста, пришлите ваш номер телефона (или нажмите кнопку 'Поделиться контактом'):", 
+    if message.location:
+        await state.update_data(delivery_lat=message.location.latitude, delivery_lon=message.location.longitude)
+    else:
+        await state.update_data(delivery=message.text)
+    
+    # Запрашиваем номер телефона
+    await message.answer("📞 Пожалуйста, введите ваш номер телефона или нажмите кнопку ниже:", 
                          reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="📱 Отправить номер", request_contact=True)]], resize_keyboard=True))
     await state.set_state(OrderForm.phone)
-
     @dp.message(OrderForm.phone)
+
+    
+@dp.message(OrderForm.phone)
 async def process_phone(message: Message, state: FSMContext):
     phone = message.contact.phone_number if message.contact else message.text
     await state.update_data(phone=phone)
-    
-    # ... переход к выбору оплаты ...
-    
+    # Далее переход к выбору оплаты
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💵 Наличные", callback_data="pay_cash"), 
          InlineKeyboardButton(text="💳 Карта", callback_data="pay_card")]
     ])
     await message.answer("✅ Выберите способ оплаты:", reply_markup=kb)
     await state.set_state(OrderForm.payment_method)
-
+    
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
     # ... (код получения data) ...
