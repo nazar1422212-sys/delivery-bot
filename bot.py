@@ -11,6 +11,8 @@ from translations import get_text
 from config import TOKEN, ADMIN_ID
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+
 
 from database import (
     connect_db, init_db, set_user_role, update_courier_verification, 
@@ -239,6 +241,36 @@ async def check_queue():
         
         # Check queue every 10 seconds
         await asyncio.sleep(10)
+
+
+@dp.callback_query(F.data.startswith("finish_"))
+async def finish_order_check(callback: CallbackQuery, state: FSMContext):
+    order_id = int(callback.data.split("_")[1])
+    # Просим курьера прислать локацию для проверки
+    await callback.message.answer("📍 Пожалуйста, пришлите вашу текущую геопозицию, чтобы завершить заказ.")
+    await state.update_data(finishing_order=order_id)
+    await state.set_state("waiting_for_finish_location")
+
+@dp.message(State("waiting_for_finish_location"), F.location)
+async def verify_finish_location(message: Message, state: FSMContext):
+    data = await state.get_data()
+    order_id = data['finishing_order']
+    order = await get_order_data(order_id)
+    
+    # Расстояние между курьером и точкой Б
+    courier_coords = (message.location.latitude, message.location.longitude)
+    delivery_coords = (order['delivery_lat'], order['delivery_lon'])
+    
+    dist_meters = geodesic(courier_coords, delivery_coords).meters
+    
+    if dist_meters <= 100:
+        await update_order_status(order_id, 'completed')
+        await message.answer(f"🎉 Заказ №{order_id} успешно завершен! К оплате: {order['price']} лей.")
+        # Тут можно уведомить клиента
+    else:
+        await message.answer(f"❌ Вы слишком далеко ({int(dist_meters)} м). Нужно быть в радиусе 100 м.")
+    
+    await state.clear()
 
 def get_maps_link(lat1, lon1, lat2, lon2):
     return f"https://www.google.com/maps/dir/?api=1&origin={lat1},{lon1}&destination={lat2},{lon2}"
