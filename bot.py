@@ -278,6 +278,12 @@ async def finish_order_check(callback: CallbackQuery, state: FSMContext):
     except Exception as e:
         print(f"ERROR: Failed to start finish order: {e}")
         await callback.answer("❌ Ошибка при завершении заказа", show_alert=True)
+        # В finalize_order в bot.py:
+    try:
+        price, dist = calculate_price(data['pickup'], data['delivery'])
+    except Exception as e:
+        print(f"Ошибка расчета: {e}")
+        price, dist = 100.0, 0 # Безопасное значение при сбое
 
 @dp.message(FinishOrderForm.waiting_for_finish_location, F.location)
 async def verify_finish_location(message: Message, state: FSMContext):
