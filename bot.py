@@ -338,17 +338,21 @@ async def reset_orders(message: Message):
         await message.answer("❌ Ошибка при удалении заказов")
 
 async def calculate_price(data):
-    """Единая функция расчета стоимости"""
-    # 1. Если есть координаты (lat/lon)
-    if data.get('pickup_lat') and data.get('delivery_lat'):
-        dist = geodesic(
-            (data['pickup_lat'], data['pickup_lon']), 
-            (data['delivery_lat'], data['delivery_lon'])
-        ).km
-    # 2. Если есть адреса строками
+    """Рассчитывает цену, используя сначала координаты, если они есть."""
+    
+    lat1 = data.get('pickup_lat')
+    lon1 = data.get('pickup_lon')
+    lat2 = data.get('delivery_lat')
+    lon2 = data.get('delivery_lon')
+
+    # Если есть обе пары координат — считаем по ним (самый точный способ)
+    if all([lat1, lon1, lat2, lon2]):
+        dist = geodesic((lat1, lon1), (lat2, lon2)).km
     else:
+        # Если координат нет, пробуем искать по тексту
         dist = await get_distance(data.get('pickup', ''), data.get('delivery', ''))
     
+    # 50 лей база + 10 лей за км
     price = 50 + (dist * 10)
     return round(price, 0), round(dist, 1)
 
