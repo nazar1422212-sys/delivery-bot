@@ -27,7 +27,7 @@ dp = Dispatcher()
 class OrderForm(StatesGroup):
     pickup = State()
     delivery = State()
-    phone = State() # <-- Добавляем стейт для телефона
+    phone = State() # Новое состояние
     payment_method = State()
 
 class FinishOrderForm(StatesGroup):
