@@ -127,12 +127,16 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
         client_phone=data.get('phone')
     )
 
-    if order_id:
+if order_id:
         await set_order_waiting(order_id)
-        await callback.message.edit_text(f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.")
-    else:
-        await callback.message.edit_text("❌ Ошибка базы данных при создании заказа.")
-    
+        # Добавляем кнопку отмены с ID заказа
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"cancel_{order_id}")]
+        ])
+        await callback.message.edit_text(
+            f"✅ Заказ №{order_id} создан!\nРасстояние: {dist} км\nИтого: {price} лей.",
+            reply_markup=kb
+        )
     await state.clear()
 
 # --- КУРЬЕРСКИЕ ФУНКЦИИ ---
