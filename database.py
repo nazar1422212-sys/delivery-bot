@@ -25,7 +25,7 @@ async def init_db():
     await execute("""
         CREATE TABLE IF NOT EXISTS users (tg_id BIGINT PRIMARY KEY, role TEXT, lang TEXT DEFAULT 'ru');
         CREATE TABLE IF NOT EXISTS couriers (tg_id BIGINT PRIMARY KEY, online BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, card_number TEXT, passport_url TEXT, last_active TIMESTAMP DEFAULT NOW());
-        CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_id BIGINT, pickup_address TEXT, delivery_address TEXT, pickup_lat DOUBLE PRECISION, pickup_lon DOUBLE PRECISION, delivery_lat DOUBLE PRECISION, delivery_lon DOUBLE PRECISION, price DOUBLE PRECISION, status TEXT DEFAULT 'waiting', payment_method TEXT, payment_status TEXT DEFAULT 'pending', courier_id BIGINT, created_at TIMESTAMP DEFAULT NOW());
+        CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_id BIGINT, pickup_address TEXT, delivery_address TEXT, pickup_lat DOUBLE PRECISION, pickup_lon DOUBLE PRECISION, delivery_lat DOUBLE PRECISION, delivery_lon DOUBLE PRECISION, price DOUBLE PRECISION, status TEXT DEFAULT 'waiting', payment_method TEXT, payment_status TEXT DEFAULT 'pending', courier_id BIGINT, client_phone TEXT, client_tg_id BIGINT, created_at TIMESTAMP DEFAULT NOW());
         CREATE TABLE IF NOT EXISTS order_history (id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW());
     """)
     
@@ -43,7 +43,7 @@ async def init_db():
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_id BIGINT;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS client_phone TEXT;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS client_tg_id BIGINT;")
-   
+
 async def set_user_role(tg_id, role):
     await execute("INSERT INTO users (tg_id, role) VALUES ($1, $2) ON CONFLICT (tg_id) DO UPDATE SET role = $2", tg_id, role)
 
@@ -62,11 +62,10 @@ async def create_order(client_tg_id, pickup, delivery, price, method, p_lat, p_l
         INSERT INTO orders (client_tg_id, pickup_address, delivery_address, price, payment_method, 
                             pickup_lat, pickup_lon, delivery_lat, delivery_lon, client_phone)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       return row['id']
+        RETURNING id
     """
-    # Предполагаем, что у вас есть доступ к объекту подключения 'conn'
-    row = await conn.fetchrow(query, client_tg_id, pickup, delivery, price, method, p_lat, p_lon, d_lat, d_lon, phone)
-    return row['id'] if row else None
+    row = await fetchval(query, client_tg_id, pickup, delivery, price, method, p_lat, p_lon, d_lat, d_lon, phone)
+    return row
 
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
