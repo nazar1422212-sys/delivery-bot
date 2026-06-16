@@ -223,6 +223,9 @@ async def check_queue():
         # Check queue every 10 seconds
         await asyncio.sleep(10)
 
+def get_maps_link(lat1, lon1, lat2, lon2):
+    return f"https://www.google.com/maps/dir/?api=1&origin={lat1},{lon1}&destination={lat2},{lon2}"
+
 async def main():
     await connect_db()
     await init_db()
