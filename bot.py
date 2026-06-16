@@ -99,32 +99,24 @@ async def process_phone(message: Message, state: FSMContext):
 
 @dp.callback_query(OrderForm.payment_method, F.data.startswith("pay_"))
 async def finalize_order(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    method = callback.data.split("_")[1]
+    # ... (код получения data) ...
     data = await state.get_data()
     
-    # 1. ПРОВЕРКА ДАННЫХ (сначала проверяем, есть ли что считать)
-    if not data or ('pickup' not in data and 'pickup_lat' not in data):
-        await callback.message.edit_text("❌ Ошибка: данные заказа не найдены. Начните заново /order")
-        await state.clear()
-        return
-    
-    # 2. РАСЧЕТ ЦЕНЫ (вызываем только один раз)
+    # Расчет цены
     price, dist = await calculate_price(data)
     
-    # 3. СОЗДАНИЕ ЗАКАЗА
-    try:
-        order_id = await create_order(
-            callback.from_user.id, 
-            data.get('pickup', 'Coordinates provided'), 
-            data.get('delivery', 'Coordinates provided'), 
-            price, 
-            method,
-            data.get('pickup_lat'),
-            data.get('pickup_lon'),
-            data.get('delivery_lat'),
-            data.get('delivery_lon')
-        )
+    # Создание заказа с передачей телефона
+    order_id = await create_order(
+        callback.from_user.id, 
+        data.get('pickup', 'Coordinates provided'), 
+        data.get('delivery', 'Coordinates provided'), 
+        price, 
+        method,
+        data.get('pickup_lat'), data.get('pickup_lon'),
+        data.get('delivery_lat'), data.get('delivery_lon'),
+        data.get('phone') # <-- Телефон, который мы собрали ранее
+    )
+    # ... (остальной код) ...
         
         if order_id:
             await set_order_waiting(order_id)
