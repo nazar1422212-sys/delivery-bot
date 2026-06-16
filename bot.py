@@ -103,45 +103,69 @@ async def cancel_handler(callback: CallbackQuery):
 lang = await get_user_lang(message.from_user.id) # или 'ru' по умолчанию
 await message.answer(get_text('order_created', lang, id=order_id, price=data['price']))
 
-# Курьер на месте А
+def get_courier_kb(order_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📍 Я на месте (А)", callback_data=f"at_pickup_{order_id}")],
+        [InlineKeyboardButton(text="🏁 Я на месте (Б)", callback_data=f"at_delivery_{order_id}")]
+    ])
+
+# --- ЛОГИКА ТАЙМЕРА КЛИЕНТА ---
+async def client_timeout_timer(order_id):
+    await asyncio.sleep(3600) # 1 час
+    order = await db.get_order_data(order_id)
+    if order and order['status'] != 'completed':
+        await bot.send_message(order['courier_id'], "⚠️ Клиент не подтвердил прибытие. Можете оставить заказ себе.")
+
+# --- ОБРАБОТЧИКИ КУРЬЕРА ---
 @dp.callback_query(F.data.startswith("at_pickup_"))
 async def at_pickup(callback: CallbackQuery):
     order_id = callback.data.split("_")[2]
-    await db.update_order_status_db(order_id, 'at_pickup')
-    
-    # Уведомляем клиента
+    await db.update_order_status(order_id, 'at_pickup')
     order = await db.get_order_data(order_id)
+    
+    # Уведомление клиенту
     kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Хорошо", callback_data=f"client_ok_{order_id}")]])
     await bot.send_message(order['client_tg_id'], "🚗 Курьер прибыл на место погрузки!", reply_markup=kb)
-    
-    # Запускаем фоновую задачу-таймер на 1 час (если клиент не нажмет кнопку)
     asyncio.create_task(client_timeout_timer(order_id))
+    await callback.answer("Клиент уведомлен")
 
-# Курьер на месте Б (Завершение)
 @dp.message(F.location)
-async def handle_delivery_location(message: Message, state: FSMContext):
-    # Проверяем, есть ли у курьера активный заказ
-    order = await db.get_my_active_order(message.from_user.id)
+async def handle_delivery_location(message: Message):
+    order = await db.get_active_order_for_courier(message.from_user.id)
     if not order: return
 
-    # Сравнение координат (простая геометрия)
+    # Расчет дистанции (приблизительно)
     dist = ((message.location.latitude - order['delivery_lat'])**2 + 
             (message.location.longitude - order['delivery_lon'])**2)**0.5
     
-    if dist < 0.001: # Примерно 100 метров
-        await db.update_order_status_db(order['id'], 'completed')
+    if dist < 0.001: # 100 метров
+        await db.update_order_status(order['id'], 'completed')
         await message.answer("🏁 Заказ завершен!")
         await bot.send_message(order['client_tg_id'], "🎉 Заказ доставлен!")
     else:
         await message.answer("❌ Вы далеко от точки доставки. Подойдите ближе.")
 
-# Таймер 1 час
-async def client_timeout_timer(order_id):
-    await asyncio.sleep(3600) 
-    order = await db.get_order_data(order_id)
-    if order['status'] != 'completed':
-        # Уведомляем курьера, что заказ можно оставить себе
-        await bot.send_message(order['courier_id'], "⚠️ Клиент не подтвердил прибытие. Можете оставить заказ себе.")
+# --- СПИСОК ДОСТУПНЫХ ЗАКАЗОВ ---
+@dp.message(Command("active_orders"))
+async def show_orders(message: Message):
+    orders = await db.get_all_waiting_orders()
+    for order in orders:
+        text = f"📦 Заказ №{order['id']}\nЦена: {order['price']} лей"
+        kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{order['id']}")]])
+        await message.answer(text, reply_markup=kb)
+
+@dp.callback_query(F.data.startswith("accept_"))
+async def accept_order(callback: CallbackQuery):
+    order_id = callback.data.split("_")[1]
+    await db.update_order_status(order_id, 'in_progress', callback.from_user.id)
+    await callback.message.edit_text(f"✅ Заказ принят!", reply_markup=get_courier_kb(order_id))
+
+# --- КЛИЕНТСКИЕ ОБРАБОТЧИКИ ---
+@dp.callback_query(F.data.startswith("client_ok_"))
+async def client_ok(callback: CallbackQuery):
+    await callback.answer("Спасибо! Курьер продолжает работу.")
+    await callback.message.edit_text("✅ Прибытие подтверждено.")
+
 
 async def main():
     await db.connect_db()
