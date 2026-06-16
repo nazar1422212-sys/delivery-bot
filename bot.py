@@ -164,15 +164,13 @@ async def approve_courier(callback: CallbackQuery):
 
 @dp.message(Command("online"))
 async def go_online(message: Message):
-    await set_courier_status(message.from_user.id, True)
-    await update_courier_activity(message.from_user.id)
-    await message.answer("✅ Вы онлайн!")
+    await set_courier_status(message.from_user.id, True) # online = TRUE
+    await message.answer("✅ Вы теперь онлайн и будете получать заказы!")
 
 @dp.message(Command("offline"))
 async def go_offline(message: Message):
-    await set_courier_status(message.from_user.id, False)
-    await update_courier_activity(message.from_user.id)
-    await message.answer("💤 Вы ушли с линии.")
+    await set_courier_status(message.from_user.id, False) # online = FALSE
+    await message.answer("💤 Вы ушли с линии. Заказы не будут приходить.")
 
 @dp.message(Command("help"))
 async def help_command(message: Message):
