@@ -103,6 +103,46 @@ async def cancel_handler(callback: CallbackQuery):
 lang = await get_user_lang(message.from_user.id) # или 'ru' по умолчанию
 await message.answer(get_text('order_created', lang, id=order_id, price=data['price']))
 
+# Курьер на месте А
+@dp.callback_query(F.data.startswith("at_pickup_"))
+async def at_pickup(callback: CallbackQuery):
+    order_id = callback.data.split("_")[2]
+    await db.update_order_status_db(order_id, 'at_pickup')
+    
+    # Уведомляем клиента
+    order = await db.get_order_data(order_id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✅ Хорошо", callback_data=f"client_ok_{order_id}")]])
+    await bot.send_message(order['client_tg_id'], "🚗 Курьер прибыл на место погрузки!", reply_markup=kb)
+    
+    # Запускаем фоновую задачу-таймер на 1 час (если клиент не нажмет кнопку)
+    asyncio.create_task(client_timeout_timer(order_id))
+
+# Курьер на месте Б (Завершение)
+@dp.message(F.location)
+async def handle_delivery_location(message: Message, state: FSMContext):
+    # Проверяем, есть ли у курьера активный заказ
+    order = await db.get_my_active_order(message.from_user.id)
+    if not order: return
+
+    # Сравнение координат (простая геометрия)
+    dist = ((message.location.latitude - order['delivery_lat'])**2 + 
+            (message.location.longitude - order['delivery_lon'])**2)**0.5
+    
+    if dist < 0.001: # Примерно 100 метров
+        await db.update_order_status_db(order['id'], 'completed')
+        await message.answer("🏁 Заказ завершен!")
+        await bot.send_message(order['client_tg_id'], "🎉 Заказ доставлен!")
+    else:
+        await message.answer("❌ Вы далеко от точки доставки. Подойдите ближе.")
+
+# Таймер 1 час
+async def client_timeout_timer(order_id):
+    await asyncio.sleep(3600) 
+    order = await db.get_order_data(order_id)
+    if order['status'] != 'completed':
+        # Уведомляем курьера, что заказ можно оставить себе
+        await bot.send_message(order['courier_id'], "⚠️ Клиент не подтвердил прибытие. Можете оставить заказ себе.")
+
 async def main():
     await db.connect_db()
     await db.init_db()
