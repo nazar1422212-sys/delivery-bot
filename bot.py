@@ -113,7 +113,11 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
             data.get('pickup', 'Coordinates provided'), 
             data.get('delivery', 'Coordinates provided'), 
             price, 
-            method
+            method,
+            data.get('pickup_lat'),
+            data.get('pickup_lon'),
+            data.get('delivery_lat'),
+            data.get('delivery_lon')
         )
         
         if order_id:
@@ -131,47 +135,67 @@ async def finalize_order(callback: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("accept_"))
 async def accept_order(callback: CallbackQuery):
-    order_id = callback.data.split("_")[1]
-    # Обновляем статус заказа в БД на 'in_progress'
-    await update_order_status(order_id, 'in_progress', callback.from_user.id)
-    
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"at_pickup_{order_id}")],
-        [InlineKeyboardButton(text="🏁 Завершить (Точка Б)", callback_data=f"finish_{order_id}")]
-    ])
-    await callback.message.edit_text(f"✅ Заказ №{order_id} принят! Двигайтесь к точке А.", reply_markup=kb)
+    try:
+        order_id = callback.data.split("_")[1]
+        # Обновляем статус заказа в БД на 'in_progress'
+        await update_order_status(order_id, 'in_progress', callback.from_user.id)
+        
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📍 Я на месте (Точка А)", callback_data=f"at_pickup_{order_id}")],
+            [InlineKeyboardButton(text="🏁 Завершить (Точка Б)", callback_data=f"finish_{order_id}")]
+        ])
+        await callback.message.edit_text(f"✅ Заказ №{order_id} принят! Двигайтесь к точке А.", reply_markup=kb)
+    except Exception as e:
+        print(f"ERROR: Failed to accept order: {e}")
+        await callback.answer("❌ Ошибка при принятии заказа", show_alert=True)
 
 @dp.message(F.photo)
 async def handle_passport(message: Message):
-    photo_id = message.photo[-1].file_id
-    await set_passport_photo(message.from_user.id, photo_id)
-    await bot.send_photo(
-        ADMIN_ID, 
-        photo_id, 
-        caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", 
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}"),
-            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{message.from_user.id}")
-        ]])
-    )
-    await message.answer("✅ Паспорт получен. Ожидайте подтверждения.")
+    try:
+        photo_id = message.photo[-1].file_id
+        await set_passport_photo(message.from_user.id, photo_id)
+        await bot.send_photo(
+            ADMIN_ID, 
+            photo_id, 
+            caption=f"🛂 Курьер {message.from_user.id} прислал паспорт. Одобрить?", 
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{message.from_user.id}"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{message.from_user.id}")
+            ]])
+        )
+        await message.answer("✅ Паспорт получен. Ожидайте подтверждения.")
+    except Exception as e:
+        print(f"ERROR: Failed to handle passport: {e}")
+        await message.answer("❌ Ошибка при отправке паспорта")
 
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_courier(callback: CallbackQuery):
-    courier_id = callback.data.split("_")[1]
-    await verify_courier(int(courier_id))
-    await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
-    await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! /online")
+    try:
+        courier_id = callback.data.split("_")[1]
+        await verify_courier(int(courier_id))
+        await callback.message.edit_caption(caption=f"✅ Курьер {courier_id} одобрен!")
+        await bot.send_message(int(courier_id), "🎉 Ваш аккаунт проверен! /online")
+    except Exception as e:
+        print(f"ERROR: Failed to approve courier: {e}")
+        await callback.answer("❌ Ошибка при одобрении курьера", show_alert=True)
 
 @dp.message(Command("online"))
 async def go_online(message: Message):
-    await set_courier_status(message.from_user.id, True) # online = TRUE
-    await message.answer("✅ Вы теперь онлайн и будете получать заказы!")
+    try:
+        await set_courier_status(message.from_user.id, True)
+        await message.answer("✅ Вы теперь онлайн и будете получать заказы!")
+    except Exception as e:
+        print(f"ERROR: Failed to set online status: {e}")
+        await message.answer("❌ Ошибка при установке статуса")
 
 @dp.message(Command("offline"))
 async def go_offline(message: Message):
-    await set_courier_status(message.from_user.id, False) # online = FALSE
-    await message.answer("💤 Вы ушли с линии. Заказы не будут приходить.")
+    try:
+        await set_courier_status(message.from_user.id, False)
+        await message.answer("💤 Вы ушли с линии. Заказы не будут приходить.")
+    except Exception as e:
+        print(f"ERROR: Failed to set offline status: {e}")
+        await message.answer("❌ Ошибка при установке статуса")
 
 @dp.message(Command("help"))
 async def help_command(message: Message):
@@ -218,80 +242,106 @@ async def get_distance(addr1, addr2):
 
 async def check_queue():
     while True:
-        # Получаем заказы, которые 'waiting' (без курьера)
-        orders = await get_waiting_orders()
-        for order in orders:
-            couriers = await get_verified_couriers() # Только онлайн и верифицированные
-            if couriers:
-                # Отправляем заказ первому свободному курьеру
-                text = (f"🔔 **Новый заказ №{order['id']}**\n"
-                        f"📍 {order['pickup_address']}\n"
-                        f"🏁 {order['delivery_address']}\n"
-                        f"💰 Цена: {order['price']} лей")
-                
-                # Добавляем кнопки принятия заказа
-                kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]
-                ])
-                
-                await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb)
-                # Меняем статус на 'pending', чтобы бот не слал этот заказ снова
-                await update_order_status(order['id'], 'pending')
+        try:
+            # Получаем заказы, которые 'waiting' (без курьера)
+            orders = await get_waiting_orders()
+            for order in orders:
+                couriers = await get_verified_couriers()  # Только онлайн и верифицированные
+                if couriers:
+                    # Отправляем заказ первому свободному курьеру
+                    text = (f"🔔 **Новый заказ №{order['id']}**\n"
+                            f"📍 {order['pickup_address']}\n"
+                            f"🏁 {order['delivery_address']}\n"
+                            f"💰 Цена: {order['price']} лей")
+                    
+                    # Добавляем кнопки принятия заказа
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]
+                    ])
+                    
+                    await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb)
+                    # Меняем статус на 'pending', чтобы бот не слал этот заказ снова
+                    await update_order_status(order['id'], 'pending')
+        except Exception as e:
+            print(f"ERROR in check_queue: {e}")
         
-        await asyncio.sleep(10) # Теперь проверка каждые 10 секунд
+        await asyncio.sleep(10)  # Проверка каждые 10 секунд
 
 @dp.callback_query(F.data.startswith("finish_"))
 async def finish_order_check(callback: CallbackQuery, state: FSMContext):
-    order_id = int(callback.data.split("_")[1])
-    # Просим курьера прислать локацию для проверки
-    await callback.message.answer("📍 Пожалуйста, пришлите вашу текущую геопозицию, чтобы завершить заказ.")
-    await state.update_data(finishing_order=order_id)
-    await state.set_state(FinishOrderForm.waiting_for_finish_location)
+    try:
+        order_id = int(callback.data.split("_")[1])
+        # Просим курьера прислать локацию для проверки
+        await callback.message.answer("📍 Пожалуйста, пришлите вашу текущую геопозицию, чтобы завершить заказ.")
+        await state.update_data(finishing_order=order_id)
+        await state.set_state(FinishOrderForm.waiting_for_finish_location)
+    except Exception as e:
+        print(f"ERROR: Failed to start finish order: {e}")
+        await callback.answer("❌ Ошибка при завершении заказа", show_alert=True)
 
 @dp.message(FinishOrderForm.waiting_for_finish_location, F.location)
 async def verify_finish_location(message: Message, state: FSMContext):
-    data = await state.get_data()
-    order_id = data['finishing_order']
-    order = await get_order_data(order_id)
-    
-    if not order:
-        await message.answer("❌ Заказ не найден.")
+    try:
+        data = await state.get_data()
+        order_id = data.get('finishing_order')
+        
+        if not order_id:
+            await message.answer("❌ Ошибка: ID заказа не найден.")
+            await state.clear()
+            return
+            
+        order = await get_order_data(order_id)
+        
+        if not order:
+            await message.answer("❌ Заказ не найден.")
+            await state.clear()
+            return
+        
+        if not order.get('delivery_lat') or not order.get('delivery_lon'):
+            await message.answer("❌ Координаты доставки не найдены в заказе.")
+            await state.clear()
+            return
+        
+        # Расстояние между курьером и точкой Б
+        courier_coords = (message.location.latitude, message.location.longitude)
+        delivery_coords = (order['delivery_lat'], order['delivery_lon'])
+        
+        dist_meters = geodesic(courier_coords, delivery_coords).meters
+        
+        if dist_meters <= 100:
+            await update_order_status(order_id, 'completed')
+            await message.answer(f"🎉 Заказ №{order_id} успешно завершен! К оплате: {order['price']} лей.")
+        else:
+            await message.answer(f"❌ Вы слишком далеко ({int(dist_meters)} м). Нужно быть в радиусе 100 м.")
+    except Exception as e:
+        print(f"ERROR: Failed to verify finish location: {e}")
+        await message.answer("❌ Ошибка при завершении заказа")
+    finally:
         await state.clear()
-        return
-    
-    # Расстояние между курьером и точкой Б
-    courier_coords = (message.location.latitude, message.location.longitude)
-    delivery_coords = (order['delivery_lat'], order['delivery_lon'])
-    
-    dist_meters = geodesic(courier_coords, delivery_coords).meters
-    
-    if dist_meters <= 100:
-        await update_order_status(order_id, 'completed')
-        await message.answer(f"🎉 Заказ №{order_id} успешно завершен! К оплате: {order['price']} лей.")
-        # Тут можно уведомить клиента
-    else:
-        await message.answer(f"❌ Вы слишком далеко ({int(dist_meters)} м). Нужно быть в радиусе 100 м.")
-    
-    await state.clear()
-
-def get_maps_link(lat1, lon1, lat2, lon2):
-    return f"https://www.google.com/maps/dir/?api=1&origin={lat1},{lon1}&destination={lat2},{lon2}"
 
 @dp.message(Command("reset"))
 async def reset_orders(message: Message):
-    if message.from_user.id != int(ADMIN_ID): # Проверка на админа
-        return await message.answer("❌ У вас нет прав для этой команды.")
-    
-    # Удаляем все заказы со статусом 'waiting' или 'pending'
-    await execute("DELETE FROM orders WHERE status IN ('waiting', 'pending');")
-    await message.answer("🧹 Все ожидающие заказы были удалены.")
+    try:
+        if message.from_user.id != int(ADMIN_ID):
+            return await message.answer("❌ У вас нет прав для этой команды.")
+        
+        # Удаляем все заказы со статусом 'waiting' или 'pending'
+        await execute("DELETE FROM orders WHERE status IN ('waiting', 'pending');")
+        await message.answer("🧹 Все ожидающие заказы были удалены.")
+    except Exception as e:
+        print(f"ERROR: Failed to reset orders: {e}")
+        await message.answer("❌ Ошибка при удалении заказов")
 
 async def main():
-    await connect_db()
-    await init_db()
-    keep_alive.run_web()
-    asyncio.create_task(check_queue())
-    await dp.start_polling(bot)
+    try:
+        await connect_db()
+        await init_db()
+        keep_alive.run_web()
+        asyncio.create_task(check_queue())
+        await dp.start_polling(bot)
+    except Exception as e:
+        print(f"CRITICAL ERROR in main: {e}")
+        raise
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -20,14 +20,17 @@ async def init_db():
     await execute("""
         CREATE TABLE IF NOT EXISTS users (tg_id BIGINT PRIMARY KEY, role TEXT, lang TEXT DEFAULT 'ru');
         CREATE TABLE IF NOT EXISTS couriers (tg_id BIGINT PRIMARY KEY, online BOOLEAN DEFAULT FALSE, is_verified BOOLEAN DEFAULT FALSE, card_number TEXT, passport_url TEXT, last_active TIMESTAMP DEFAULT NOW());
-        CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_id BIGINT);
+        CREATE TABLE IF NOT EXISTS orders (id SERIAL PRIMARY KEY, client_id BIGINT, pickup_address TEXT, delivery_address TEXT, pickup_lat DOUBLE PRECISION, pickup_lon DOUBLE PRECISION, delivery_lat DOUBLE PRECISION, delivery_lon DOUBLE PRECISION, price DOUBLE PRECISION, status TEXT DEFAULT 'waiting', payment_method TEXT, payment_status TEXT DEFAULT 'pending', courier_id BIGINT, created_at TIMESTAMP DEFAULT NOW());
         CREATE TABLE IF NOT EXISTS order_history (id SERIAL PRIMARY KEY, order_id INT, courier_id BIGINT, price DOUBLE PRECISION, rating INT, comment TEXT, created_at TIMESTAMP DEFAULT NOW());
     """)
     
     # Принудительно добавляем недостающие колонки в таблицу orders
-    # Мы используем обработку ошибок или IF NOT EXISTS, чтобы избежать сбоев при повторном запуске
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_address TEXT;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_lat DOUBLE PRECISION;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_lon DOUBLE PRECISION;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_lat DOUBLE PRECISION;")
+    await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_lon DOUBLE PRECISION;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION;")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'waiting';")
     await execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT;")
@@ -47,10 +50,11 @@ async def set_courier_status(tg_id, status: bool):
 async def get_verified_couriers():
     return await fetch("SELECT tg_id FROM couriers WHERE is_verified = TRUE AND online = TRUE")
 
-async def create_order(client_id, pickup, delivery, price, payment_method):
-    query = "INSERT INTO orders (client_id, pickup_address, delivery_address, price, payment_method) VALUES ($1, $2, $3, $4, $5) RETURNING id"
-    row = await fetch(query, client_id, pickup, delivery, price, payment_method)
-    return row[0][0]
+async def create_order(client_id, pickup, delivery, price, payment_method, pickup_lat=None, pickup_lon=None, delivery_lat=None, delivery_lon=None):
+    """Create order with optional coordinates"""
+    query = "INSERT INTO orders (client_id, pickup_address, delivery_address, pickup_lat, pickup_lon, delivery_lat, delivery_lon, price, payment_method) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
+    row = await fetch(query, client_id, pickup, delivery, pickup_lat, pickup_lon, delivery_lat, delivery_lon, price, payment_method)
+    return row[0]['id'] if row else None
 
 async def set_order_waiting(order_id):
     await execute("UPDATE orders SET status = 'waiting' WHERE id = $1", order_id)
@@ -59,7 +63,9 @@ async def get_waiting_orders():
     return await fetch("SELECT * FROM orders WHERE status = 'waiting'")
 
 async def update_order_status(order_id, status, courier_id=None):
+    order_id = int(order_id)  # Ensure order_id is integer
     if courier_id:
+        courier_id = int(courier_id)  # Ensure courier_id is integer
         await execute("UPDATE orders SET status = $1, courier_id = $2 WHERE id = $3", status, courier_id, order_id)
     else:
         await execute("UPDATE orders SET status = $1 WHERE id = $2", status, order_id)
@@ -99,7 +105,7 @@ async def get_order_courier(order_id):
     row = await fetch("SELECT courier_id FROM orders WHERE id = $1", order_id)
     return row[0]['courier_id'] if row else None
 
-# В database.py добавьте функцию получения данных заказа
 async def get_order_data(order_id):
+    """Get order data by order_id"""
     row = await fetch("SELECT * FROM orders WHERE id = $1", order_id)
     return row[0] if row else None
