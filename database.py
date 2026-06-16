@@ -62,7 +62,7 @@ async def create_order(client_tg_id, pickup, delivery, price, method, p_lat, p_l
         INSERT INTO orders (client_tg_id, pickup_address, delivery_address, price, payment_method, 
                             pickup_lat, pickup_lon, delivery_lat, delivery_lon, client_phone)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING id;
+       return row['id']
     """
     # Предполагаем, что у вас есть доступ к объекту подключения 'conn'
     row = await conn.fetchrow(query, client_tg_id, pickup, delivery, price, method, p_lat, p_lon, d_lat, d_lon, phone)
