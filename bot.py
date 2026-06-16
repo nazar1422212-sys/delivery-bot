@@ -223,24 +223,28 @@ async def get_distance(addr1, addr2):
         return 5.0
 
 async def check_queue():
-    """Check waiting orders queue and assign to available couriers"""
     while True:
-        try:
-            waiting_orders = await get_waiting_orders()
-            verified_couriers = await get_verified_couriers()
-            
-            if waiting_orders and verified_couriers:
-                # Simple assignment: first available courier gets first order
-                for order in waiting_orders:
-                    for courier in verified_couriers:
-                        await update_order_status(order['id'], 'assigned', courier['id'])
-                        await bot.send_message(courier['id'], f"📦 Новый заказ №{order['id']}")
-                        break
-        except Exception as e:
-            print(f"ERROR in check_queue: {e}")
+        # Получаем заказы, которые 'waiting' (без курьера)
+        orders = await get_waiting_orders()
+        for order in orders:
+            couriers = await get_verified_couriers() # Только онлайн и верифицированные
+            if couriers:
+                # Отправляем заказ первому свободному курьеру
+                text = (f"🔔 **Новый заказ №{order['id']}**\n"
+                        f"📍 {order['pickup_address']}\n"
+                        f"🏁 {order['delivery_address']}\n"
+                        f"💰 Цена: {order['price']} лей")
+                
+                # Добавляем кнопки принятия заказа
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="✅ Принять заказ", callback_data=f"accept_{order['id']}")]
+                ])
+                
+                await bot.send_message(couriers[0]['tg_id'], text, reply_markup=kb)
+                # Меняем статус на 'pending', чтобы бот не слал этот заказ снова
+                await update_order_status(order['id'], 'pending')
         
-        # Check queue every 10 seconds
-        await asyncio.sleep(10)
+        await asyncio.sleep(10) # Теперь проверка каждые 10 секунд
 
 
 @dp.callback_query(F.data.startswith("finish_"))
