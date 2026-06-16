@@ -279,6 +279,15 @@ async def verify_finish_location(message: Message, state: FSMContext):
 def get_maps_link(lat1, lon1, lat2, lon2):
     return f"https://www.google.com/maps/dir/?api=1&origin={lat1},{lon1}&destination={lat2},{lon2}"
 
+@dp.message(Command("reset"))
+async def reset_orders(message: Message):
+    if message.from_user.id != int(ADMIN_ID): # Проверка на админа
+        return await message.answer("❌ У вас нет прав для этой команды.")
+    
+    # Удаляем все заказы со статусом 'waiting' или 'pending'
+    await execute("DELETE FROM orders WHERE status IN ('waiting', 'pending');")
+    await message.answer("🧹 Все ожидающие заказы были удалены.")
+
 async def main():
     await connect_db()
     await init_db()
